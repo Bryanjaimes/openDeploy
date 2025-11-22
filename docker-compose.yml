@@ -10,6 +10,7 @@ services:
     environment:
       - ENV=development
       - OPENDEPLOY_API_KEY=secret-key-123
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     restart: always
 
   frontend:

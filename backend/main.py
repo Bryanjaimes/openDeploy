@@ -4,11 +4,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Any
 from contextlib import asynccontextmanager
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from .registry import registry
 from .loader import load_plugins
 from .gen_ui import generate_ui_from_prompt
 from pydantic import BaseModel
+import google.generativeai as genai
 
 # --- Security Setup ---
 API_KEY_NAME = "X-API-Key"
@@ -103,4 +108,56 @@ async def generate_ui(request: GenUIRequest):
     """
     html = generate_ui_from_prompt(request.prompt)
     return {"html": html}
+
+class ChatRequest(BaseModel):
+    message: str
+
+@app.post("/chat", dependencies=[Depends(get_api_key)])
+async def chat(request: ChatRequest):
+    """
+    Chat with an AI assistant about the UI/platform.
+    Uses Gemini AI for intelligent conversation.
+    """
+    api_key = os.getenv("GEMINI_API_KEY")
+    
+    # Fallback if no API key
+    if not api_key:
+        message = request.message.lower()
+        ui_keywords = ["add", "create", "make", "field", "input", "button", "form"]
+        if any(kw in message for kw in ui_keywords):
+            return {"response": "I'll create that for you!", "action": "generate_ui", "prompt": request.message}
+        return {"response": "I can help you customize this interface!", "action": "none"}
+    
+    # Use Gemini AI
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('models/gemini-2.5-flash')
+        
+        system_prompt = """You are a helpful UI assistant for OpenDeploy, a medical AI platform.
+        
+When users request UI changes (like "add patient field" or "create a dropdown"):
+- Respond: "I'll create that for you!"
+- Return: {"response": "your message", "action": "generate_ui", "prompt": "clear description of what to generate"}
+
+When users ask questions:
+- Respond conversationally
+- Return: {"response": "your message", "action": "none"}
+
+Always return valid JSON with 'response', 'action', and optionally 'prompt' fields."""
+        
+        response = model.generate_content(f"{system_prompt}\n\nUser: {request.message}")
+        
+        # Parse JSON from response
+        import json, re
+        text = response.text.strip()
+        json_match = re.search(r'\{.*\}', text, re.DOTALL)
+        
+        if json_match:
+            return json.loads(json_match.group())
+        else:
+            return {"response": text, "action": "none"}
+            
+    except Exception as e:
+        print(f"Gemini error: {e}")
+        return {"response": "I'm here to help! What would you like to add?", "action": "none"}
 

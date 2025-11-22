@@ -301,25 +301,135 @@
                     </div>
                 </div>
 
-                <!-- Gen UI Box -->
-                <div class="gen-ui-container" style="margin-top: 40px; border-top: 1px dashed #ccc; padding-top: 20px;">
-                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                        <i class="fas fa-magic" style="color: #6554C0;"></i>
-                        <span style="font-weight: bold; color: #6554C0;">Gen UI Editor</span>
-                    </div>
-                    <div style="display: flex; gap: 10px;">
-                        <input type="text" id="gen-ui-prompt" placeholder="Describe how you want to change this UI (e.g., 'Add a patient history field')" style="flex: 1; padding: 8px; border: 1px solid #6554C0; border-radius: 4px;">
-                        <button class="btn" onclick="generateUI()" style="background: #6554C0;">Generate</button>
-                    </div>
-                    <div id="gen-ui-status" style="font-size: 12px; color: #6b778c; margin-top: 5px;"></div>
-                </div>
+                <!-- Gen UI Box (Removed) -->
             </div>
         </div>
+    </div>
+
+    <!-- Chatbot Widget -->
+    <div id="chatbot-widget" style="position: fixed; bottom: 20px; right: 20px; z-index: 1000;">
+        <div id="chat-window" style="display: none; width: 300px; height: 400px; background: white; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); flex-direction: column; overflow: hidden; margin-bottom: 10px;">
+            <div style="background: #6554C0; color: white; padding: 10px; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
+                <span><i class="fas fa-robot"></i> Gen UI Assistant</span>
+                <i class="fas fa-times" style="cursor: pointer;" onclick="toggleChat()"></i>
+            </div>
+            <div id="chat-messages" style="flex: 1; padding: 10px; overflow-y: auto; background: #f4f5f7;">
+                <div style="background: #e9e9eb; padding: 8px; border-radius: 8px; margin-bottom: 8px; max-width: 80%;">
+                    Hello! I can help you customize this interface. Try asking me to "add a patient history field".
+                </div>
+            </div>
+            <div style="padding: 10px; border-top: 1px solid #dfe1e6; display: flex; gap: 5px;">
+                <input type="text" id="chat-input" placeholder="Type a command..." style="flex: 1; padding: 8px; border: 1px solid #dfe1e6; border-radius: 4px;" onkeypress="handleChatKey(event)">
+                <button onclick="sendChat()" style="background: #6554C0; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer;"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+        <button onclick="toggleChat()" style="background: #6554C0; color: white; border: none; width: 60px; height: 60px; border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.2); cursor: pointer; font-size: 24px; float: right;">
+            <i class="fas fa-magic"></i>
+        </button>
     </div>
 
     <script>
         const API_URL = 'http://localhost:8000';
         let currentModel = null;
+
+        function toggleChat() {
+            const win = document.getElementById('chat-window');
+            win.style.display = win.style.display === 'none' ? 'flex' : 'none';
+        }
+
+        function handleChatKey(e) {
+            if (e.key === 'Enter') sendChat();
+        }
+
+        async function sendChat() {
+            const input = document.getElementById('chat-input');
+            const messages = document.getElementById('chat-messages');
+            const prompt = input.value.trim();
+            const apiKey = document.getElementById('api-key').value;
+            
+            if (!prompt) return;
+            
+            // User Message
+            messages.innerHTML += `
+                <div style="display: flex; justify-content: flex-end; margin-bottom: 8px;">
+                    <div style="background: #6554C0; color: white; padding: 8px; border-radius: 8px; max-width: 80%;">
+                        ${prompt}
+                    </div>
+                </div>`;
+            
+            input.value = '';
+            messages.scrollTop = messages.scrollHeight;
+
+            // Loading Message
+            const loadingId = 'loading-' + Date.now();
+            messages.innerHTML += `
+                <div id="${loadingId}" style="background: #e9e9eb; padding: 8px; border-radius: 8px; margin-bottom: 8px; max-width: 80%; color: #6b778c; font-style: italic;">
+                    Thinking...
+                </div>`;
+            messages.scrollTop = messages.scrollHeight;
+
+            try {
+                // Call the chat endpoint (not generate-ui directly)
+                const chatRes = await fetch(`${API_URL}/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': apiKey
+                    },
+                    body: JSON.stringify({ message: prompt })
+                });
+
+                const loadingEl = document.getElementById(loadingId);
+                
+                if (!chatRes.ok) {
+                    loadingEl.textContent = "Error: Failed to connect.";
+                    loadingEl.style.color = "red";
+                    return;
+                }
+
+                const chatData = await chatRes.json();
+                
+                // Remove loading
+                loadingEl.remove();
+
+                // Bot Response
+                messages.innerHTML += `
+                <div style="background: #e9e9eb; padding: 8px; border-radius: 8px; margin-bottom: 8px; max-width: 80%;">
+                    ${chatData.response}
+                </div>`;
+
+                // If the bot wants to generate UI, do it
+                if (chatData.action === 'generate_ui' && chatData.prompt) {
+                    const uiRes = await fetch(`${API_URL}/generate-ui`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-API-Key': apiKey
+                        },
+                        body: JSON.stringify({ prompt: chatData.prompt })
+                    });
+
+                    if (uiRes.ok) {
+                        const uiData = await uiRes.json();
+                        
+                        // Inject the HTML
+                        const formContainer = document.getElementById('dynamic-form');
+                        const div = document.createElement('div');
+                        div.innerHTML = uiData.html;
+                        formContainer.insertBefore(div, formContainer.firstChild);
+                    }
+                }
+                
+                messages.scrollTop = messages.scrollHeight;
+
+            } catch (e) {
+                const loadingEl = document.getElementById(loadingId);
+                if(loadingEl) {
+                    loadingEl.textContent = "Error: " + e.message;
+                    loadingEl.style.color = "red";
+                }
+            }
+        }
 
         async function fetchModels() {
             const apiKey = document.getElementById('api-key').value;
@@ -506,44 +616,6 @@
             } catch (e) {
                 diagnosisText.textContent = 'Error';
                 diagnosisSub.textContent = e.message;
-            }
-        }
-
-        async function generateUI() {
-            const prompt = document.getElementById('gen-ui-prompt').value;
-            const status = document.getElementById('gen-ui-status');
-            const apiKey = document.getElementById('api-key').value;
-            
-            if (!prompt) return;
-            
-            status.textContent = '✨ AI is generating new UI components...';
-            
-            try {
-                const res = await fetch(`${API_URL}/generate-ui`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-API-Key': apiKey
-                    },
-                    body: JSON.stringify({ prompt: prompt })
-                });
-
-                if (!res.ok) throw new Error('Generation failed');
-
-                const data = await res.json();
-                const formContainer = document.getElementById('dynamic-form');
-                
-                const div = document.createElement('div');
-                div.innerHTML = data.html;
-                
-                // Insert at the top of the form
-                formContainer.insertBefore(div, formContainer.firstChild);
-                
-                status.textContent = '✅ UI Component added successfully.';
-                document.getElementById('gen-ui-prompt').value = ''; // Clear input
-
-            } catch (e) {
-                status.textContent = '❌ Error generating UI: ' + e.message;
             }
         }
 
