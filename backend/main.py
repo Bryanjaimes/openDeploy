@@ -1,10 +1,34 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Body
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Security, Depends, status
+from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Any
 from contextlib import asynccontextmanager
+import os
 
 from .registry import registry
 from .loader import load_plugins
+from .gen_ui import generate_ui_from_prompt
+from pydantic import BaseModel
+
+# --- Security Setup ---
+API_KEY_NAME = "X-API-Key"
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+async def get_api_key(api_key_header: str = Security(api_key_header)):
+    expected_key = os.getenv("OPENDEPLOY_API_KEY")
+    
+    # If no key is configured on the server, allow access (Dev Mode)
+    if not expected_key:
+        return None
+        
+    if api_key_header == expected_key:
+        return api_key_header
+        
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Invalid or missing API Key"
+    )
+# ----------------------
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,12 +60,12 @@ def read_root():
 def health_check():
     return {"status": "healthy"}
 
-@app.get("/models")
+@app.get("/models", dependencies=[Depends(get_api_key)])
 def list_models():
     """List all deployed models and their capabilities"""
     return registry.list_models()
 
-@app.post("/models/{model_name}/predict")
+@app.post("/models/{model_name}/predict", dependencies=[Depends(get_api_key)])
 async def predict(model_name: str, file: UploadFile = File(None), text_input: str = Body(None)):
     """
     Generic prediction endpoint. 
@@ -68,4 +92,15 @@ async def predict(model_name: str, file: UploadFile = File(None), text_input: st
 
     else:
         raise HTTPException(status_code=500, detail="Unsupported model input type")
+
+class GenUIRequest(BaseModel):
+    prompt: str
+
+@app.post("/generate-ui", dependencies=[Depends(get_api_key)])
+async def generate_ui(request: GenUIRequest):
+    """
+    Generates HTML UI components based on a natural language prompt.
+    """
+    html = generate_ui_from_prompt(request.prompt)
+    return {"html": html}
 

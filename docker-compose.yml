@@ -9,6 +9,7 @@ services:
       - ./models:/app/models # Mount models directory for hot-reloading models
     environment:
       - ENV=development
+      - OPENDEPLOY_API_KEY=secret-key-123
     restart: always
 
   frontend:

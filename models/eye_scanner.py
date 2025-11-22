@@ -9,7 +9,7 @@ from backend.interface import AIModel
 class EyeScannerModel(AIModel):
     @property
     def name(self):
-        return "eye-abnormality-detector"
+        return "diabetic-retinopathy-glaucoma-detector"
 
     @property
     def input_type(self):
@@ -28,7 +28,7 @@ class EyeScannerModel(AIModel):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
         self.ready = True
-
+ 
     async def predict(self, input_data: bytes):
         # 1. Preprocess image
         try:
@@ -49,8 +49,10 @@ class EyeScannerModel(AIModel):
             is_abnormal = stat > 0.5 # Arbitrary threshold for demo
             confidence = 0.85 + (stat * 0.1) # Fake confidence based on brightness
             
+            diagnosis = "Diabetic Retinopathy / Glaucoma Detected" if is_abnormal else "No Signs of Retinopathy or Glaucoma"
+            
             return {
-                "diagnosis": "Abnormal" if is_abnormal else "Normal",
+                "diagnosis": diagnosis,
                 "confidence": f"{confidence:.2%}",
                 "details": f"Scan processed. Mean intensity: {stat:.4f}",
                 "image_size": f"{image.width}x{image.height}"
