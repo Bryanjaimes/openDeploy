@@ -203,6 +203,7 @@
             border-radius: 8px;
             margin-bottom: 20px;
             text-align: center;
+            word-wrap: break-word;
         }
 
         .diagnosis-card.normal { background: #e3fcef; color: #006644; border: 1px solid #36b37e; }
@@ -224,7 +225,7 @@
         <div class="nav-item active" onclick="showDashboard()">
             <i class="fas fa-th-large"></i> Dashboard
         </div>
-        <div class="nav-item">
+        <div class="nav-item" onclick="showHistory()">
             <i class="fas fa-history"></i> History
         </div>
         <div class="nav-item">
@@ -295,13 +296,21 @@
 
                             <div style="margin-top: 30px;">
                                 <h4>Analysis Details</h4>
-                                <pre id="raw-output" style="background: #f4f5f7; padding: 10px; border-radius: 4px; font-size: 12px;"></pre>
+                                <pre id="raw-output" style="background: #f4f5f7; padding: 10px; border-radius: 4px; font-size: 12px; white-space: pre-wrap; word-wrap: break-word;"></pre>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Gen UI Box (Removed) -->
+            </div>
+        </div>
+
+        <!-- History View -->
+        <div id="history-view" class="hidden">
+            <h3>Prediction History</h3>
+            <div id="history-list">
+                <div class="card">Loading history...</div>
             </div>
         </div>
     </div>
@@ -352,7 +361,7 @@
             // User Message
             messages.innerHTML += `
                 <div style="display: flex; justify-content: flex-end; margin-bottom: 8px;">
-                    <div style="background: #6554C0; color: white; padding: 8px; border-radius: 8px; max-width: 80%;">
+                    <div style="background: #6554C0; color: white; padding: 8px; border-radius: 8px; max-width: 80%; word-wrap: break-word;">
                         ${prompt}
                     </div>
                 </div>`;
@@ -394,7 +403,7 @@
 
                 // Bot Response
                 messages.innerHTML += `
-                <div style="background: #e9e9eb; padding: 8px; border-radius: 8px; margin-bottom: 8px; max-width: 80%;">
+                <div style="background: #e9e9eb; padding: 8px; border-radius: 8px; margin-bottom: 8px; max-width: 80%; word-wrap: break-word;">
                     ${chatData.response}
                 </div>`;
 
@@ -482,6 +491,7 @@
         function selectModel(model) {
             currentModel = model;
             document.getElementById('dashboard-view').classList.add('hidden');
+            document.getElementById('history-view').classList.add('hidden');
             document.getElementById('workspace-view').classList.remove('hidden');
             
             document.getElementById('selected-model-name').textContent = model.name;
@@ -539,7 +549,63 @@
         function showDashboard() {
             document.getElementById('dashboard-view').classList.remove('hidden');
             document.getElementById('workspace-view').classList.add('hidden');
+            document.getElementById('history-view').classList.add('hidden');
             currentModel = null;
+        }
+
+        async function showHistory() {
+            document.getElementById('dashboard-view').classList.add('hidden');
+            document.getElementById('workspace-view').classList.add('hidden');
+            document.getElementById('history-view').classList.remove('hidden');
+            
+            const container = document.getElementById('history-list');
+            container.innerHTML = '<div class="card">Loading...</div>';
+            
+            try {
+                const apiKey = document.getElementById('api-key').value;
+                const res = await fetch(`${API_URL}/history`, {
+                    headers: { 'X-API-Key': apiKey }
+                });
+                
+                if (!res.ok) throw new Error("Failed to fetch history");
+                
+                const history = await res.json();
+                
+                if (history.length === 0) {
+                    container.innerHTML = '<div class="card">No history yet. Run some predictions!</div>';
+                    return;
+                }
+                
+                container.innerHTML = '';
+                history.forEach(entry => {
+                    const date = new Date(entry.timestamp).toLocaleString();
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.style.borderLeft = '4px solid var(--primary)';
+                    
+                    let resultDisplay = '';
+                    if (entry.result.diagnosis) {
+                        resultDisplay = `<div style="font-weight: bold; color: ${entry.result.diagnosis.includes('Abnormal') ? 'var(--danger)' : 'var(--success)'}">${entry.result.diagnosis}</div>`;
+                    } else {
+                        resultDisplay = `<pre style="background: #f4f5f7; padding: 5px; border-radius: 4px; overflow: auto; max-height: 100px;">${JSON.stringify(entry.result, null, 2)}</pre>`;
+                    }
+
+                    card.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                            <strong>${entry.model}</strong>
+                            <span style="color: #6b778c; font-size: 12px;">${date}</span>
+                        </div>
+                        <div style="margin-bottom: 10px; color: #505f79;">
+                            <i class="fas fa-arrow-right"></i> ${entry.input}
+                        </div>
+                        ${resultDisplay}
+                    `;
+                    container.appendChild(card);
+                });
+                
+            } catch (e) {
+                container.innerHTML = `<div class="card" style="color: var(--danger)">Error loading history: ${e.message}</div>`;
+            }
         }
 
         function handleImageSelect(input) {
@@ -556,12 +622,21 @@
 
         async function runPrediction() {
             const resultArea = document.getElementById('result-area');
+            const resultImage = document.querySelector('.result-image');
             const diagnosisBox = document.getElementById('diagnosis-box');
             const diagnosisText = document.getElementById('diagnosis-text');
             const diagnosisSub = document.getElementById('diagnosis-sub');
             const rawOutput = document.getElementById('raw-output');
             
             resultArea.classList.remove('hidden');
+            
+            // Hide image preview if not an image model
+            if (currentModel.input_type === 'text') {
+                if (resultImage) resultImage.style.display = 'none';
+            } else {
+                if (resultImage) resultImage.style.display = 'flex';
+            }
+
             diagnosisBox.className = 'diagnosis-card'; // reset
             diagnosisBox.style.background = '#f4f5f7';
             diagnosisText.textContent = 'Analyzing...';
@@ -575,10 +650,22 @@
 
                 if (currentModel.input_type === 'text') {
                     const text = document.getElementById('text-input').value;
-                    body = JSON.stringify(text); 
-                    headers['Content-Type'] = 'application/json';
+                    if (!text) {
+                        alert("Please enter some text first.");
+                        return;
+                    }
+                    // Send as FormData to match backend expectation (unified with file upload)
+                    const formData = new FormData();
+                    formData.append('text_input', text);
+                    body = formData;
+                    // Let browser set Content-Type with boundary
+                    delete headers['Content-Type'];
                 } else if (currentModel.input_type === 'image') {
                     const fileInput = document.getElementById('file-input');
+                    if (!fileInput.files[0]) {
+                        alert("Please select an image first.");
+                        return;
+                    }
                     const formData = new FormData();
                     formData.append('file', fileInput.files[0]);
                     body = formData;
@@ -605,6 +692,13 @@
                     } else {
                         diagnosisBox.classList.add('normal');
                     }
+                } else if (data.response) {
+                    // Handle text model response
+                    diagnosisText.textContent = "AI Response";
+                    diagnosisSub.textContent = data.response;
+                    diagnosisBox.style.background = '#e3fcef';
+                    diagnosisBox.style.color = '#0052cc';
+                    diagnosisBox.style.border = '1px solid #0052cc';
                 }
 
                 if (data.confidence) {

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Security, Depends, status
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Security, Depends, status, Form
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Any
@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-from .registry import registry
-from .loader import load_plugins
-from .gen_ui import generate_ui_from_prompt
+from backend.registry import registry
+from backend.loader import load_plugins
+from backend.gen_ui import generate_ui_from_prompt
 from pydantic import BaseModel
 import google.generativeai as genai
 
@@ -38,7 +38,10 @@ async def get_api_key(api_key_header: str = Security(api_key_header)):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Load all models dynamically
-    load_plugins("models")
+    # Resolve absolute path to models directory (sibling of backend)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    models_path = os.path.join(os.path.dirname(current_dir), "models")
+    load_plugins(models_path)
     yield
     # Shutdown: Could unload models here if needed
 
@@ -70,8 +73,16 @@ def list_models():
     """List all deployed models and their capabilities"""
     return registry.list_models()
 
+# In-memory history storage
+prediction_history = []
+
+@app.get("/history", dependencies=[Depends(get_api_key)])
+def get_history():
+    """Get the history of predictions"""
+    return prediction_history
+
 @app.post("/models/{model_name}/predict", dependencies=[Depends(get_api_key)])
-async def predict(model_name: str, file: UploadFile = File(None), text_input: str = Body(None)):
+async def predict(model_name: str, file: UploadFile = File(None), text_input: str = Form(None)):
     """
     Generic prediction endpoint. 
     Accepts either a file (for image/audio models) or text_input (for LLMs).
@@ -80,12 +91,15 @@ async def predict(model_name: str, file: UploadFile = File(None), text_input: st
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
 
+    result = None
+    input_summary = ""
+
     # Simple routing based on input type
     if model.input_type == "text":
         if not text_input:
              raise HTTPException(status_code=400, detail="Model requires 'text_input'")
         result = await model.predict(text_input)
-        return result
+        input_summary = text_input[:50] + "..." if len(text_input) > 50 else text_input
     
     elif model.input_type == "image":
         if not file:
@@ -93,10 +107,22 @@ async def predict(model_name: str, file: UploadFile = File(None), text_input: st
         # In a real app, we'd process the image bytes here
         content = await file.read()
         result = await model.predict(content)
-        return result
+        input_summary = f"Image: {file.filename}"
 
     else:
         raise HTTPException(status_code=500, detail="Unsupported model input type")
+
+    # Save to history
+    import datetime
+    history_entry = {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "model": model_name,
+        "input": input_summary,
+        "result": result
+    }
+    prediction_history.insert(0, history_entry) # Add to top
+
+    return result
 
 class GenUIRequest(BaseModel):
     prompt: str

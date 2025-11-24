@@ -1,5 +1,5 @@
 from typing import Dict, Type
-from .interface import AIModel
+from backend.interface import AIModel
 
 class ModelRegistry:
     def __init__(self):

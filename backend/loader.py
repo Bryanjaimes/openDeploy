@@ -3,8 +3,8 @@ import os
 import sys
 import inspect
 from typing import List
-from .interface import AIModel
-from .registry import registry
+from backend.interface import AIModel
+from backend.registry import registry
 
 def load_plugins(models_dir: str = "models"):
     """
@@ -12,10 +12,11 @@ def load_plugins(models_dir: str = "models"):
     """
     print(f"🔌 Scanning for models in '{models_dir}'...")
     
-    # Ensure the models directory is in the python path so we can import from it
+    # Ensure the parent of models directory is in the python path so we can import models.x
     abs_path = os.path.abspath(models_dir)
-    if abs_path not in sys.path:
-        sys.path.append(abs_path)
+    parent_dir = os.path.dirname(abs_path)
+    if parent_dir not in sys.path:
+        sys.path.append(parent_dir)
 
     # List all python files in the directory
     if not os.path.exists(models_dir):
