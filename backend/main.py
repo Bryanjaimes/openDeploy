@@ -13,6 +13,7 @@ from backend.registry import registry
 from backend.loader import load_plugins
 from backend.gen_ui import generate_ui_from_prompt
 from backend.database import init_db, get_db, Prediction
+from backend.cloud_optimizer import optimizer
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import google.generativeai as genai
@@ -188,4 +189,37 @@ Always return valid JSON with 'response', 'action', and optionally 'prompt' fiel
     except Exception as e:
         print(f"Gemini error: {e}")
         return {"response": "I'm here to help! What would you like to add?", "action": "none"}
+
+class CloudRecommendRequest(BaseModel):
+    model_name: str
+    provider: str = None
+
+@app.post("/deploy/recommend", dependencies=[Depends(get_api_key)])
+async def recommend_cloud(request: CloudRecommendRequest):
+    """
+    Analyzes a model's requirements and recommends the best cloud instance.
+    """
+    model = registry.get_model(request.model_name)
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+    
+    # Heuristic to determine requirements based on model type
+    # In the future, models could self-report their requirements
+    min_ram = 1 # Default 1GB
+    min_vram = 0
+    
+    if model.name == "tiny-llama-1.1b":
+        min_ram = 8
+        min_vram = 6 # Needs GPU
+    elif model.name == "diabetic-retinopathy-glaucoma-detector":
+        min_ram = 4
+        min_vram = 0 # Can run on CPU, but slow. Let's say CPU is fine for cost.
+    
+    recommendation = optimizer.recommend(
+        min_ram=min_ram, 
+        min_vram=min_vram, 
+        preferred_provider=request.provider
+    )
+    
+    return recommendation
 

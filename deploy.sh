@@ -45,9 +45,14 @@ ssh -t $TARGET "bash -s" << EOF
 
     # Start services
     echo "🚀 Starting services..."
-    # We use 'docker compose' (v2)
-    sudo docker compose down || true
-    sudo docker compose up -d --build
+    # We use 'docker compose' (v2) or 'docker-compose' (v1)
+    if command -v docker-compose &> /dev/null; then
+        sudo docker-compose down || true
+        sudo docker-compose up -d --build
+    else
+        sudo docker compose down || true
+        sudo docker compose up -d --build
+    fi
 
     # Get Public IP (naive check)
     PUBLIC_IP=\$(curl -s ifconfig.me || echo "localhost")
