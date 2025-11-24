@@ -12,6 +12,8 @@ load_dotenv()
 from backend.registry import registry
 from backend.loader import load_plugins
 from backend.gen_ui import generate_ui_from_prompt
+from backend.database import init_db, get_db, Prediction
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import google.generativeai as genai
 
@@ -37,6 +39,9 @@ async def get_api_key(api_key_header: str = Security(api_key_header)):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Startup: Initialize Database
+    init_db()
+    
     # Startup: Load all models dynamically
     # Resolve absolute path to models directory (sibling of backend)
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -73,16 +78,13 @@ def list_models():
     """List all deployed models and their capabilities"""
     return registry.list_models()
 
-# In-memory history storage
-prediction_history = []
-
 @app.get("/history", dependencies=[Depends(get_api_key)])
-def get_history():
+def get_history(db: Session = Depends(get_db)):
     """Get the history of predictions"""
-    return prediction_history
+    return db.query(Prediction).order_by(Prediction.timestamp.desc()).all()
 
 @app.post("/models/{model_name}/predict", dependencies=[Depends(get_api_key)])
-async def predict(model_name: str, file: UploadFile = File(None), text_input: str = Form(None)):
+async def predict(model_name: str, file: UploadFile = File(None), text_input: str = Form(None), db: Session = Depends(get_db)):
     """
     Generic prediction endpoint. 
     Accepts either a file (for image/audio models) or text_input (for LLMs).
@@ -113,14 +115,14 @@ async def predict(model_name: str, file: UploadFile = File(None), text_input: st
         raise HTTPException(status_code=500, detail="Unsupported model input type")
 
     # Save to history
-    import datetime
-    history_entry = {
-        "timestamp": datetime.datetime.now().isoformat(),
-        "model": model_name,
-        "input": input_summary,
-        "result": result
-    }
-    prediction_history.insert(0, history_entry) # Add to top
+    db_prediction = Prediction(
+        model=model_name,
+        input=input_summary,
+        result=result
+    )
+    db.add(db_prediction)
+    db.commit()
+    db.refresh(db_prediction)
 
     return result
 

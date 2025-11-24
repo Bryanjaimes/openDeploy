@@ -6,3 +6,4 @@ torchvision
 pillow
 google-generativeai
 python-dotenv
+sqlalchemy
