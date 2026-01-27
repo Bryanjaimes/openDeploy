@@ -7,3 +7,6 @@ pillow
 google-generativeai
 python-dotenv
 sqlalchemy
+transformers
+accelerate
+tritonclient[http]

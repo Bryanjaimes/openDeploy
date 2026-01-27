@@ -1,24 +1,64 @@
-# OpenDeploy v2# OpenDeploy
+# OpenDeploy — The Sovereign AI Cloud Platform
 
+OpenDeploy is an open-source, multi-cloud orchestration engine that treats AI models as first-class citizens. It lets engineers build, optimize, and serve models (LLMs, Vision, Diffusion) across any compute substrate—from AWS Spot to rural edge devices—with a single CLI command.
 
+## 🚀 V0 (Local Runner)
 
-A platform for developers to deploy AI models with auto-generated UIs.**One-click platform to deploy and scale ML models to the cheapest/fastest cloud automatically.**
+Goal: prove that a model is a deployable service with a standardized local endpoint.
 
+### 1) Build the CLI
 
+```bash
+cd cli
+go build -o opendeploy ./cmd/opendeploy
+```
 
-## Structure[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+### 2) Run a model locally
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+```bash
+./opendeploy run tiny-llama-chat
+```
 
-- `backend/`: FastAPI server to handle model deployment and inference requests.
+The local runner starts the backend container and exposes:
 
-- `frontend/`: Web interface (will eventually auto-generate UIs based on model input/output schema).## 🚀 Vision
+- `POST http://localhost:8000/generate`
 
-- `models/`: Directory to store or reference AI models.
+Example request:
 
-OpenDeploy democratizes AI deployment. Anyone can deploy powerful ML models (LLMs, vision, speech, diffusion) in 60 seconds—no Kubernetes or cloud APIs required. We automatically find the cheapest/fastest GPU, scale to zero, and provide production-grade observability.
+```bash
+curl -X POST http://localhost:8000/generate \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: secret-key-123" \
+  -d '{"prompt":"Hello!","model":"tiny-llama-chat"}'
+```
 
-## Vision
+## ⚙️ Optional: Triton Serving (Vision)
+
+If you want the eye scanner to run via NVIDIA Triton, export the ONNX model and start Triton:
+
+```bash
+# Export ResNet-18 ONNX into the Triton model repo
+python scripts/export_resnet18_onnx.py
+
+# Start Triton
+docker compose -f docker-compose.triton.yml up -d
+```
+
+Then set these env vars for the API container (or your host):
+
+- `TRITON_URL=localhost:8001`
+- `TRITON_MODEL_NAME=resnet18`
+- `TRITON_INPUT_NAME=input`
+- `TRITON_OUTPUT_NAME=logits`
+
+The `diabetic-retinopathy-glaucoma-detector` model will route inference through Triton when `TRITON_URL` is set.
+
+## Structure
+
+- `backend/`: FastAPI server for model inference and history
+- `frontend/`: Web UI for the demo platform
+- `models/`: Local model plugins
+- `cli/`: Go CLI (V0 runner)
 
 ## ✨ Features
 

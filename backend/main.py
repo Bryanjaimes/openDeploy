@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Security, Depends, status, Form
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Any
+from typing import Any, Optional
 from contextlib import asynccontextmanager
 import os
 from dotenv import load_dotenv
@@ -190,6 +190,46 @@ Always return valid JSON with 'response', 'action', and optionally 'prompt' fiel
         print(f"Gemini error: {e}")
         return {"response": "I'm here to help! What would you like to add?", "action": "none"}
 
+class GenerateRequest(BaseModel):
+    prompt: str
+    model: Optional[str] = None
+
+@app.post("/generate", dependencies=[Depends(get_api_key)])
+async def generate(request: GenerateRequest, db: Session = Depends(get_db)):
+    """
+    Simple text-generation endpoint for V0 local runner.
+    """
+    # Pick requested model or first text-capable model
+    model_name = request.model
+    if not model_name:
+        for m in registry.list_models():
+            if m.get("input_type") == "text":
+                model_name = m.get("name")
+                break
+
+    if not model_name:
+        raise HTTPException(status_code=404, detail="No text-capable model available")
+
+    model = registry.get_model(model_name)
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    result = await model.predict(request.prompt)
+
+    # Save to history
+    db_prediction = Prediction(
+        model=model_name,
+        input=request.prompt[:50] + "..." if len(request.prompt) > 50 else request.prompt,
+        result=result
+    )
+    db.add(db_prediction)
+    db.commit()
+    db.refresh(db_prediction)
+
+    if isinstance(result, dict):
+        return {"model": model_name, **result}
+    return {"model": model_name, "response": result}
+
 class CloudRecommendRequest(BaseModel):
     model_name: str
     provider: str = None
@@ -203,17 +243,10 @@ async def recommend_cloud(request: CloudRecommendRequest):
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
     
-    # Heuristic to determine requirements based on model type
-    # In the future, models could self-report their requirements
-    min_ram = 1 # Default 1GB
-    min_vram = 0
-    
-    if model.name == "tiny-llama-1.1b":
-        min_ram = 8
-        min_vram = 6 # Needs GPU
-    elif model.name == "diabetic-retinopathy-glaucoma-detector":
-        min_ram = 4
-        min_vram = 0 # Can run on CPU, but slow. Let's say CPU is fine for cost.
+    # Use model's self-reported requirements
+    reqs = model.hardware_requirements
+    min_ram = reqs.get("min_ram", 1)
+    min_vram = reqs.get("min_vram", 0)
     
     recommendation = optimizer.recommend(
         min_ram=min_ram, 

@@ -1,4 +1,5 @@
 import torch
+import asyncio
 from transformers import pipeline
 from backend.interface import AIModel
 
@@ -10,6 +11,13 @@ class TinyLlamaModel(AIModel):
     @property
     def input_type(self):
         return "text"
+
+    @property
+    def hardware_requirements(self):
+        return {
+            "min_ram": 8,
+            "min_vram": 6 # Needs GPU ideally
+        }
 
     def load(self):
         print("⬇️  Loading TinyLlama-1.1B-Chat...")
@@ -30,33 +38,36 @@ class TinyLlamaModel(AIModel):
         print(f"✅ {self.model_id} Loaded Successfully on {device}")
 
     async def predict(self, input_data):
-        # Direct interaction: No system prompt, just the user input
-        messages = [
-            {"role": "user", "content": input_data},
-        ]
+        loop = asyncio.get_running_loop()
         
-        prompt = self.pipe.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        
-        outputs = self.pipe(
-            prompt, 
-            max_new_tokens=256, 
-            do_sample=True, 
-            temperature=0.7, 
-            top_k=50, 
-            top_p=0.95
-        )
-        
-        generated_text = outputs[0]["generated_text"]
-        
-        # Clean up the response to remove the prompt
-        if "<|assistant|>" in generated_text:
-            response_only = generated_text.split("<|assistant|>")[-1].strip()
-        else:
-            response_only = generated_text
+        def _run_inference():
+            # Direct interaction: No system prompt, just the user input
+            messages = [
+                {"role": "user", "content": input_data},
+            ]
+            
+            prompt = self.pipe.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+            
+            outputs = self.pipe(
+                prompt, 
+                max_new_tokens=256, 
+                do_sample=True, 
+                temperature=0.7, 
+                top_k=50, 
+                top_p=0.95
+            )
+            
+            generated_text = outputs[0]["generated_text"]
+            
+            # Clean up the response to remove the prompt
+            if "<|assistant|>" in generated_text:
+                return generated_text.split("<|assistant|>")[-1].strip()
+            return generated_text
 
-        return {"response": response_only}
-        # Extract just the assistant's response
-        response = generated_text.split("<|assistant|>")[-1].strip()
+        # Run blocking inference in a thread pool
+        response_text = await loop.run_in_executor(None, _run_inference)
+
+        return {"response": response_text}
 
         return {
             "response": response,

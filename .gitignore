@@ -104,6 +104,10 @@ kubeconfig
 models/checkpoints/
 models/weights/
 
+# CLI binaries
+cli/opendeploy.exe
+cli/opendeploy
+
 # Logs
 logs/
 *.log

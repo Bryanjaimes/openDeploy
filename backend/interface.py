@@ -27,3 +27,11 @@ class AIModel(ABC):
     async def predict(self, input_data: Any) -> Any:
         """Run inference"""
         pass
+
+    @property
+    def hardware_requirements(self) -> Dict[str, Any]:
+        """
+        Return hardware requirements for the model.
+        Default: minimal CPU requirements.
+        """
+        return {"min_ram": 1, "min_vram": 0}

@@ -1,0 +1,21 @@
+name: "resnet18"
+platform: "onnxruntime_onnx"
+max_batch_size: 8
+input [
+  {
+    name: "input"
+    data_type: TYPE_FP32
+    dims: [3, 224, 224]
+  }
+]
+output [
+  {
+    name: "logits"
+    data_type: TYPE_FP32
+    dims: [2]
+  }
+]
+instance_group [{
+  kind: KIND_CPU
+  count: 1
+}]
