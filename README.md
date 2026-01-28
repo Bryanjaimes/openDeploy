@@ -48,6 +48,25 @@ go build -o opendeploy ./cmd/opendeploy
 ./deploy.sh ec2-user@<public_ip>
 ```
 
+## 💸 V2 (AWS Spot Scheduling)
+
+Query AWS Spot pricing and choose the cheapest availability zone under a max price:
+
+```bash
+# Build CLI
+cd cli
+go build -o opendeploy ./cmd/opendeploy
+
+# Get a scheduling recommendation
+./opendeploy schedule \
+  --region us-east-1 \
+  --instance-type g5.xlarge \
+  --max-price 1.00 \
+  --on-demand-price 1.20
+```
+
+This prints the cheapest AZ and an estimated savings percentage vs on-demand pricing.
+
 ## ⚙️ Optional: Triton Serving (Vision)
 
 If you want the eye scanner to run via NVIDIA Triton, export the ONNX model and start Triton:

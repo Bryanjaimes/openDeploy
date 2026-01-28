@@ -68,7 +68,7 @@ resource "aws_security_group" "opendeploy" {
 }
 
 resource "aws_instance" "opendeploy" {
-  ami                    = data.aws_ami.amazon_linux_2023.id
+  ami                    = var.ami_id != "" ? var.ami_id : data.aws_ami.amazon_linux_2023.id
   instance_type          = var.instance_type
   key_name               = aws_key_pair.opendeploy.key_name
   vpc_security_group_ids = [aws_security_group.opendeploy.id]
@@ -80,11 +80,21 @@ resource "aws_instance" "opendeploy" {
 
   user_data = <<-EOF
     #!/bin/bash
-    yum update -y
-    yum install -y docker git
-    systemctl enable docker
-    systemctl start docker
-    usermod -a -G docker ec2-user
+    set -e
+    if command -v apt-get &> /dev/null; then
+      apt-get update -y
+      apt-get install -y docker.io git
+      systemctl enable docker
+      systemctl start docker
+      usermod -a -G docker ubuntu || true
+    else
+      yum update -y || dnf update -y
+      yum install -y docker git || dnf install -y docker git
+      systemctl enable docker
+      systemctl start docker
+      usermod -a -G docker ec2-user
+    fi
+
     curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
     chmod +x /usr/local/bin/docker-compose
   EOF
@@ -99,5 +109,5 @@ output "public_ip" {
 }
 
 output "ssh_user" {
-  value = "ec2-user"
+  value = var.ssh_user
 }

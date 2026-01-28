@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 )
 
 func main() {
@@ -17,6 +18,8 @@ func main() {
 	switch os.Args[1] {
 	case "run":
 		runCmd(os.Args[2:])
+	case "schedule":
+		scheduleCmd(os.Args[2:])
 	case "deploy":
 		deployCmd(os.Args[2:])
 	default:
@@ -28,6 +31,12 @@ func main() {
 func runCmd(args []string) {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	apiKey := fs.String("api-key", "secret-key-123", "API key for local requests")
+	strategy := fs.String("strategy", "", "scheduling strategy (e.g., cheapest)")
+	region := fs.String("region", "us-east-1", "AWS region for scheduling")
+	instanceType := fs.String("instance-type", "g5.xlarge", "EC2 instance type for scheduling")
+	maxPrice := fs.Float64("max-price", 0, "max USD per hour for spot (0 = no limit)")
+	onDemandPrice := fs.Float64("on-demand-price", 0, "optional on-demand USD per hour for savings estimate")
+	lookbackMinutes := fs.Int("lookback-minutes", 60, "lookback window in minutes for spot price history")
 	_ = fs.Parse(args)
 
 	rest := fs.Args()
@@ -37,6 +46,13 @@ func runCmd(args []string) {
 		os.Exit(1)
 	}
 	model := rest[0]
+
+	if *strategy == "cheapest" {
+		if err := printScheduleRecommendation(*region, *instanceType, *maxPrice, *onDemandPrice, time.Duration(*lookbackMinutes)*time.Minute); err != nil {
+			fmt.Fprintf(os.Stderr, "scheduling failed: %v\n", err)
+			os.Exit(1)
+		}
+	}
 
 	if err := runDockerCompose(); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to start services: %v\n", err)
@@ -142,10 +158,13 @@ func terraformOutput(dir, name string) (string, error) {
 func printUsage() {
 	fmt.Println("OpenDeploy CLI")
 	fmt.Println("Usage:")
-	fmt.Println("  opendeploy run <model> [--api-key <key>]")
+	fmt.Println("  opendeploy run <model> [--api-key <key>] [--strategy cheapest --region <region> --instance-type <type> --max-price <usd>]")
+	fmt.Println("  opendeploy schedule --region <region> --instance-type <type> [--max-price <usd>] [--on-demand-price <usd>] [--lookback-minutes <n>]")
 	fmt.Println("  opendeploy deploy --cloud aws --public-key <path> [--region <region>] [--instance-type <type>] [--key-name <name>]")
 	fmt.Println("")
 	fmt.Println("Example:")
 	fmt.Println("  opendeploy run tiny-llama-chat")
+	fmt.Println("  opendeploy run tiny-llama-chat --strategy cheapest --region us-east-1 --instance-type g5.xlarge --max-price 1.00")
+	fmt.Println("  opendeploy schedule --region us-east-1 --instance-type g5.xlarge --max-price 1.00 --on-demand-price 1.20")
 	fmt.Println("  opendeploy deploy --cloud aws --public-key ~/.ssh/id_rsa.pub")
 }

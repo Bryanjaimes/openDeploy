@@ -48,11 +48,148 @@ ssh $SSH_OPTS -t $TARGET "bash -s" << EOF
         rm get-docker.sh
     fi
 
+    # GPU setup (best-effort)
+    if lspci | grep -i nvidia &> /dev/null; then
+        if ! command -v nvidia-smi &> /dev/null; then
+            echo "Installing NVIDIA driver..."
+            if command -v dnf &> /dev/null; then
+                sudo dnf install -y dnf-plugins-core
+                sudo dnf install -y nvidia-driver
+            elif command -v yum &> /dev/null; then
+                sudo yum install -y nvidia-driver-latest-dkms
+            fi
+        fi
+
+        if ! command -v nvidia-ctk &> /dev/null; then
+            echo "Installing NVIDIA Container Toolkit..."
+            if command -v dnf &> /dev/null; then
+                sudo dnf config-manager --add-repo https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo
+                sudo dnf install -y nvidia-container-toolkit
+            elif command -v yum &> /dev/null; then
+                sudo yum-config-manager --add-repo https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo
+                sudo yum install -y nvidia-container-toolkit
+            fi
+            sudo nvidia-ctk runtime configure --runtime=docker || true
+            sudo systemctl restart docker
+        fi
+    fi
+
     # Go to directory
     cd ~/opendeploy
 
-    # Create .env file for secrets
+    # Create .env file for secrets and build settings
     echo "OPENDEPLOY_API_KEY=$API_KEY" > .env
+    echo "BUILD_MODE=full" >> .env
+    echo "BASE_IMAGE=pytorch/pytorch:2.2.2-cuda11.8-cudnn8-runtime" >> .env
+    echo "NVIDIA_VISIBLE_DEVICES=all" >> .env
+    echo "NVIDIA_DRIVER_CAPABILITIES=compute,utility" >> .env
+
+    # Start services
+    echo "🚀 Starting services..."
+    # We use 'docker compose' (v2) or 'docker-compose' (v1)
+    if command -v docker-compose &> /dev/null; then
+        sudo docker-compose down || true
+        sudo docker-compose up -d --build
+    else
+        sudo docker compose down || true
+        sudo docker compose up -d --build
+    fi
+
+    # Get Public IP (naive check)
+    PUBLIC_IP=\$(curl -s ifconfig.me || echo "localhost")
+
+    echo "---------------------------------------------------"
+    echo "✅ Deployment Complete!"
+    echo "---------------------------------------------------"
+    echo "🌍 UI:  http://\$PUBLIC_IP:3000"
+    echo "🔌 API: http://\$PUBLIC_IP:8000"
+    echo "🔑 Key: $API_KEY"
+    echo "---------------------------------------------------"
+EOF#!/bin/bash
+
+# OpenDeploy Generic Deployment Script
+# Deploys the current stack to any Linux server via SSH.
+# Usage: ./deploy.sh <user>@<host> [api_key]
+
+TARGET=$1
+API_KEY=${2:-"secret-key-123"}
+
+if [ -z "$TARGET" ]; then
+    echo "Usage: ./deploy.sh <user>@<host> [api_key]"
+    echo "Example: ./deploy.sh ubuntu@1.2.3.4 my-secure-key"
+    exit 1
+fi
+
+echo "🚀 Deploying OpenDeploy to $TARGET..."
+
+SSH_KEY=${SSH_KEY:-"$HOME/.ssh/id_ed25519"}
+SSH_OPTS="-o StrictHostKeyChecking=accept-new -i $SSH_KEY"
+
+# 1. Copy files to remote server
+echo "📦 Syncing files..."
+# We use rsync to copy everything except what's in .dockerignore or git
+if [ -f .dockerignore ]; then
+    rsync -avz -e "ssh $SSH_OPTS" --exclude-from='.dockerignore' \
+        --exclude '.git' \
+        --exclude 'venv' \
+        --exclude '.venv' \
+        . $TARGET:~/opendeploy/
+else
+    rsync -avz -e "ssh $SSH_OPTS" \
+        --exclude '.git' \
+        --exclude 'venv' \
+        --exclude '.venv' \
+        . $TARGET:~/opendeploy/
+fi
+
+# 2. Run setup on remote server
+echo "🔧 Configuring remote server..."
+ssh $SSH_OPTS -t $TARGET "bash -s" << EOF
+    set -e
+
+    # Install Docker if not present
+    if ! command -v docker &> /dev/null; then
+        echo "Installing Docker..."
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        sudo sh get-docker.sh
+        rm get-docker.sh
+    fi
+
+    # GPU setup (best-effort)
+    if lspci | grep -i nvidia &> /dev/null; then
+        if ! command -v nvidia-smi &> /dev/null; then
+            echo "Installing NVIDIA driver..."
+            if command -v dnf &> /dev/null; then
+                sudo dnf install -y dnf-plugins-core
+                sudo dnf install -y nvidia-driver
+            elif command -v yum &> /dev/null; then
+                sudo yum install -y nvidia-driver-latest-dkms
+            fi
+        fi
+
+        if ! command -v nvidia-ctk &> /dev/null; then
+            echo "Installing NVIDIA Container Toolkit..."
+            if command -v dnf &> /dev/null; then
+                sudo dnf config-manager --add-repo https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo
+                sudo dnf install -y nvidia-container-toolkit
+            elif command -v yum &> /dev/null; then
+                sudo yum-config-manager --add-repo https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo
+                sudo yum install -y nvidia-container-toolkit
+            fi
+            sudo nvidia-ctk runtime configure --runtime=docker || true
+            sudo systemctl restart docker
+        fi
+    fi
+
+    # Go to directory
+    cd ~/opendeploy
+
+    # Create .env file for secrets and build settings
+    echo "OPENDEPLOY_API_KEY=$API_KEY" > .env
+    echo "BUILD_MODE=full" >> .env
+    echo "BASE_IMAGE=pytorch/pytorch:2.2.2-cuda11.8-cudnn8-runtime" >> .env
+    echo "NVIDIA_VISIBLE_DEVICES=all" >> .env
+    echo "NVIDIA_DRIVER_CAPABILITIES=compute,utility" >> .env
 
     # Start services
     echo "🚀 Starting services..."

@@ -10,6 +10,12 @@ variable "instance_type" {
   default     = "g4dn.xlarge"
 }
 
+variable "ami_id" {
+  type        = string
+  description = "Optional AMI ID override (e.g., Deep Learning GPU AMI)"
+  default     = ""
+}
+
 variable "key_name" {
   type        = string
   description = "AWS key pair name"
@@ -24,4 +30,10 @@ variable "root_volume_size" {
   type        = number
   description = "Root volume size in GB"
   default     = 200
+}
+
+variable "ssh_user" {
+  type        = string
+  description = "SSH username for the AMI (ec2-user for Amazon Linux, ubuntu for Ubuntu)"
+  default     = "ec2-user"
 }

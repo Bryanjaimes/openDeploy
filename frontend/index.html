@@ -385,7 +385,7 @@
     </div>
 
     <script>
-        const API_URL = 'http://localhost:8000';
+        const API_URL = `${window.location.protocol}//${window.location.hostname}:8000`;
         let currentModel = null;
 
         function toggleChat() {
@@ -522,8 +522,10 @@
             models.forEach(model => {
                 const card = document.createElement('div');
                 card.className = 'model-card';
+                const isTopModel = model.name === 'mistral-small-24b-quantized';
                 card.innerHTML = `
-                    <div style="display: flex; justify-content: flex-end; align-items: start;">
+                    <div style="display: flex; justify-content: ${isTopModel ? 'space-between' : 'flex-end'}; align-items: start;">
+                        ${isTopModel ? '<span class="badge" style="background: rgba(91,124,250,0.2); color: #1e3a8a;">Most Powerful</span>' : ''}
                         <span class="badge">${model.input_type.toUpperCase()}</span>
                     </div>
                     <h3 style="margin: 15px 0 10px 0;">${model.name}</h3>
