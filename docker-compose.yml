@@ -2,7 +2,10 @@ version: '3.8'
 
 services:
   api:
-    build: .
+    build:
+      context: .
+      args:
+        BUILD_MODE: ${BUILD_MODE:-full}
     ports:
       - "8000:8000"
     volumes:

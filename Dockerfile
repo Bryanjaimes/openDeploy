@@ -9,11 +9,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file into the container
+# Copy the requirements files into the container
+ARG BUILD_MODE=full
 COPY backend/requirements.txt ./requirements.txt
+COPY backend/requirements-lite.txt ./requirements-lite.txt
 
-# Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# Install packages based on build mode
+RUN if [ "$BUILD_MODE" = "lite" ]; then \
+        pip install --no-cache-dir -r requirements-lite.txt; \
+    else \
+        pip install --no-cache-dir -r requirements.txt; \
+    fi
 
 # Copy the current directory contents into the container at /app
 COPY . .

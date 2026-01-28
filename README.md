@@ -32,6 +32,22 @@ curl -X POST http://localhost:8000/generate \
   -d '{"prompt":"Hello!","model":"tiny-llama-chat"}'
 ```
 
+## ☁️ V1 (Single-Cloud Deploy)
+
+Provision a GPU VM on AWS and deploy the runner:
+
+```bash
+# Build CLI
+cd cli
+go build -o opendeploy ./cmd/opendeploy
+
+# Provision cloud (requires Terraform + AWS credentials)
+./opendeploy deploy --cloud aws --public-key ~/.ssh/id_rsa.pub
+
+# Deploy app to the new VM
+./deploy.sh ec2-user@<public_ip>
+```
+
 ## ⚙️ Optional: Triton Serving (Vision)
 
 If you want the eye scanner to run via NVIDIA Triton, export the ONNX model and start Triton:

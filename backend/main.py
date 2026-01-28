@@ -16,7 +16,11 @@ from backend.database import init_db, get_db, Prediction
 from backend.cloud_optimizer import optimizer
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-import google.generativeai as genai
+
+try:
+    import google.generativeai as genai
+except Exception:
+    genai = None
 
 # --- Security Setup ---
 API_KEY_NAME = "X-API-Key"
@@ -150,7 +154,7 @@ async def chat(request: ChatRequest):
     api_key = os.getenv("GEMINI_API_KEY")
     
     # Fallback if no API key
-    if not api_key:
+    if not api_key or genai is None:
         message = request.message.lower()
         ui_keywords = ["add", "create", "make", "field", "input", "button", "form"]
         if any(kw in message for kw in ui_keywords):

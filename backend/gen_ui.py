@@ -1,5 +1,9 @@
 import os
-import google.generativeai as genai
+
+try:
+    import google.generativeai as genai
+except Exception:
+    genai = None
 
 def generate_ui_from_prompt(prompt: str) -> str:
     """
@@ -9,7 +13,7 @@ def generate_ui_from_prompt(prompt: str) -> str:
     api_key = os.getenv("GEMINI_API_KEY")
     
     # 1. If no API key, use the "dumb" logic (Heuristics)
-    if not api_key:
+    if not api_key or genai is None:
         print("No GEMINI_API_KEY found. Using heuristics.")
         return heuristic_generate(prompt)
 

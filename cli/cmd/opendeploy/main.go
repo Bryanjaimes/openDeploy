@@ -17,6 +17,8 @@ func main() {
 	switch os.Args[1] {
 	case "run":
 		runCmd(os.Args[2:])
+	case "deploy":
+		deployCmd(os.Args[2:])
 	default:
 		printUsage()
 		os.Exit(1)
@@ -65,11 +67,85 @@ func execDockerCompose(cmd string, args []string) error {
 	return c.Run()
 }
 
+func deployCmd(args []string) {
+	fs := flag.NewFlagSet("deploy", flag.ExitOnError)
+	cloud := fs.String("cloud", "aws", "cloud provider (aws)")
+	region := fs.String("region", "us-east-1", "cloud region")
+	instanceType := fs.String("instance-type", "g4dn.xlarge", "instance type")
+	keyName := fs.String("key-name", "opendeploy", "SSH key name")
+	publicKeyPath := fs.String("public-key", "", "path to SSH public key")
+	infraDir := fs.String("infra-dir", "infra/aws", "path to terraform module")
+	_ = fs.Parse(args)
+
+	if *cloud != "aws" {
+		fmt.Fprintln(os.Stderr, "only --cloud aws is supported in V1")
+		os.Exit(1)
+	}
+
+	if *publicKeyPath == "" {
+		fmt.Fprintln(os.Stderr, "missing --public-key path")
+		os.Exit(1)
+	}
+
+	if _, err := exec.LookPath("terraform"); err != nil {
+		fmt.Fprintln(os.Stderr, "terraform not found in PATH")
+		os.Exit(1)
+	}
+
+	if err := terraformCmd(*infraDir, []string{"init"}); err != nil {
+		fmt.Fprintf(os.Stderr, "terraform init failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	applyArgs := []string{
+		"apply",
+		"-auto-approve",
+		"-var", fmt.Sprintf("region=%s", *region),
+		"-var", fmt.Sprintf("instance_type=%s", *instanceType),
+		"-var", fmt.Sprintf("key_name=%s", *keyName),
+		"-var", fmt.Sprintf("public_key_path=%s", *publicKeyPath),
+	}
+	if err := terraformCmd(*infraDir, applyArgs); err != nil {
+		fmt.Fprintf(os.Stderr, "terraform apply failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	publicIP, err := terraformOutput(*infraDir, "public_ip")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "terraform output failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("✅ Cloud instance provisioned")
+	fmt.Printf("Public IP: %s\n", publicIP)
+	fmt.Printf("Next: ./deploy.sh ec2-user@%s\n", publicIP)
+}
+
+func terraformCmd(dir string, args []string) error {
+	cmdArgs := append([]string{"-chdir=" + dir}, args...)
+	c := exec.Command("terraform", cmdArgs...)
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	c.Stdin = os.Stdin
+	return c.Run()
+}
+
+func terraformOutput(dir, name string) (string, error) {
+	c := exec.Command("terraform", "-chdir="+dir, "output", "-raw", name)
+	output, err := c.Output()
+	if err != nil {
+		return "", err
+	}
+	return string(output), nil
+}
+
 func printUsage() {
-	fmt.Println("OpenDeploy CLI (V0)")
+	fmt.Println("OpenDeploy CLI")
 	fmt.Println("Usage:")
 	fmt.Println("  opendeploy run <model> [--api-key <key>]")
+	fmt.Println("  opendeploy deploy --cloud aws --public-key <path> [--region <region>] [--instance-type <type>] [--key-name <name>]")
 	fmt.Println("")
 	fmt.Println("Example:")
 	fmt.Println("  opendeploy run tiny-llama-chat")
+	fmt.Println("  opendeploy deploy --cloud aws --public-key ~/.ssh/id_rsa.pub")
 }

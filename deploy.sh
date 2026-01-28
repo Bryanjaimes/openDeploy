@@ -15,18 +15,29 @@ fi
 
 echo "🚀 Deploying OpenDeploy to $TARGET..."
 
+SSH_KEY=${SSH_KEY:-"$HOME/.ssh/id_ed25519"}
+SSH_OPTS="-o StrictHostKeyChecking=accept-new -i $SSH_KEY"
+
 # 1. Copy files to remote server
 echo "📦 Syncing files..."
 # We use rsync to copy everything except what's in .dockerignore or git
-rsync -avz --exclude-from='.dockerignore' \
-    --exclude '.git' \
-    --exclude 'venv' \
-    --exclude '.venv' \
-    . $TARGET:~/opendeploy/
+if [ -f .dockerignore ]; then
+    rsync -avz -e "ssh $SSH_OPTS" --exclude-from='.dockerignore' \
+        --exclude '.git' \
+        --exclude 'venv' \
+        --exclude '.venv' \
+        . $TARGET:~/opendeploy/
+else
+    rsync -avz -e "ssh $SSH_OPTS" \
+        --exclude '.git' \
+        --exclude 'venv' \
+        --exclude '.venv' \
+        . $TARGET:~/opendeploy/
+fi
 
 # 2. Run setup on remote server
 echo "🔧 Configuring remote server..."
-ssh -t $TARGET "bash -s" << EOF
+ssh $SSH_OPTS -t $TARGET "bash -s" << EOF
     set -e
 
     # Install Docker if not present
