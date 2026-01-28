@@ -19,3 +19,9 @@ variable "public_key_path" {
   type        = string
   description = "Path to your SSH public key (e.g., ~/.ssh/id_rsa.pub)"
 }
+
+variable "root_volume_size" {
+  type        = number
+  description = "Root volume size in GB"
+  default     = 200
+}

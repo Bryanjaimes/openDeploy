@@ -1,5 +1,6 @@
-# Use an official Python runtime as a parent image
-FROM python:3.10-slim
+# Use a configurable base image (CPU default, GPU-capable when overridden)
+ARG BASE_IMAGE=python:3.10-slim
+FROM ${BASE_IMAGE}
 
 # Set the working directory in the container
 WORKDIR /app

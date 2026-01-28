@@ -10,3 +10,5 @@ sqlalchemy
 transformers
 accelerate
 tritonclient[http]
+bitsandbytes
+sentencepiece

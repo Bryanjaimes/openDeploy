@@ -73,6 +73,11 @@ resource "aws_instance" "opendeploy" {
   key_name               = aws_key_pair.opendeploy.key_name
   vpc_security_group_ids = [aws_security_group.opendeploy.id]
 
+  root_block_device {
+    volume_size = var.root_volume_size
+    volume_type = "gp3"
+  }
+
   user_data = <<-EOF
     #!/bin/bash
     yum update -y
