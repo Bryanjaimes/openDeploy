@@ -67,6 +67,18 @@ go build -o opendeploy ./cmd/opendeploy
 
 This prints the cheapest AZ and an estimated savings percentage vs on-demand pricing.
 
+## ⚡ V3 (Elastic Cluster Orchestration)
+
+Goal: stop managing VMs and move to cluster-native orchestration.
+
+Planned build:
+- **K8s Operator**: Custom controller that converts OpenDeploy configs into Kubernetes Deployments.
+- **Node Provisioning**: Integrate **Karpenter** (AWS) to spin up GPU nodes only when pods are pending.
+- **Scale-to-Zero**: Configure **KEDA** to watch HTTP traffic and scale deployments down when idle.
+
+Resume bullet:
+*Implemented a serverless GPU architecture using Kubernetes, Karpenter, and KEDA to achieve rapid cold-starts and scale-to-zero efficiency.*
+
 ## ⚙️ Optional: Triton Serving (Vision)
 
 If you want the eye scanner to run via NVIDIA Triton, export the ONNX model and start Triton:
