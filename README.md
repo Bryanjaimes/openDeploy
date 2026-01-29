@@ -71,10 +71,28 @@ This prints the cheapest AZ and an estimated savings percentage vs on-demand pri
 
 Goal: stop managing VMs and move to cluster-native orchestration.
 
-Planned build:
-- **K8s Operator**: Custom controller that converts OpenDeploy configs into Kubernetes Deployments.
-- **Node Provisioning**: Integrate **Karpenter** (AWS) to spin up GPU nodes only when pods are pending.
-- **Scale-to-Zero**: Configure **KEDA** to watch HTTP traffic and scale deployments down when idle.
+Implemented:
+- **K8s Operator**: Custom controller that converts OpenDeploy configs into Deployments/Services and updates status.
+- **Autoscaling**: HPA creation via `spec.autoscaling` (CPU-based).
+- **KEDA/Karpenter Manifests**: Ready-to-apply templates for scale-to-zero and node provisioning.
+
+Remaining:
+- **KEDA triggers** wired to request rate (RPS)
+- **Karpenter cluster bootstrap** (IAM, discovery tags, controller install)
+
+Local kind quickstart:
+```bash
+kubectl apply -f k8s/crd/opendeploy.yaml
+kubectl apply -f k8s/rbac.yaml
+kubectl apply -f k8s/operator-deployment.yaml
+kubectl apply -f k8s/sample/opendeploy-sample.yaml
+```
+
+If you use HPA locally, install metrics-server:
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+kubectl -n kube-system patch deployment metrics-server --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+```
 
 Resume bullet:
 *Implemented a serverless GPU architecture using Kubernetes, Karpenter, and KEDA to achieve rapid cold-starts and scale-to-zero efficiency.*

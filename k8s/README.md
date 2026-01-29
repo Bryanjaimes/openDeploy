@@ -33,7 +33,35 @@ docker push ghcr.io/bryanjaimes/opendeploy-operator:dev
 kubectl apply -f k8s/sample/opendeploy-sample.yaml
 ```
 
+## Autoscaling (HPA via operator)
+
+The operator now creates an HPA when `spec.autoscaling` is present in an `OpenDeploy` resource.
+
+```yaml
+autoscaling:
+	minReplicas: 1
+	maxReplicas: 3
+	cpuUtilization: 70
+```
+
+## KEDA (scale-to-zero)
+
+Requires KEDA installed in the cluster.
+
+```bash
+kubectl apply -f k8s/keda/opendeploy-demo-scaledobject.yaml
+```
+
+## Karpenter (node provisioning)
+
+Requires Karpenter installed and a discovery tag on subnets/security groups.
+
+```bash
+kubectl apply -f k8s/karpenter/opendeploy-ec2nodeclass.yaml
+kubectl apply -f k8s/karpenter/opendeploy-nodepool.yaml
+```
+
 ## Next steps
 
-- Implement the operator controller (reconcile `OpenDeploy` -> Deployment/Service)
-- Add Karpenter provisioner configs and KEDA ScaledObject
+- Wire KEDA triggers to request rate (HTTP/RPS)
+- Add Prometheus metrics adapter for autoscaling signals

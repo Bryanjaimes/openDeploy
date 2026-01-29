@@ -73,6 +73,7 @@ def ensure_deployment(apps_v1: client.AppsV1Api, obj: Dict[str, Any]):
                         client.V1Container(
                             name="api",
                             image=image,
+                            image_pull_policy="IfNotPresent",
                             ports=[client.V1ContainerPort(container_port=port)],
                             env=env,
                             resources=resources,
@@ -128,6 +129,63 @@ def ensure_service(core_v1: client.CoreV1Api, obj: Dict[str, Any]):
             raise
 
 
+def ensure_hpa(autoscaling_v2: client.AutoscalingV2Api, obj: Dict[str, Any]):
+    metadata = obj.get("metadata", {})
+    spec = obj.get("spec", {})
+    autoscaling = spec.get("autoscaling") or {}
+    name = metadata.get("name")
+    namespace = get_namespace(obj)
+
+    if not autoscaling:
+        try:
+            autoscaling_v2.delete_namespaced_horizontal_pod_autoscaler(name=name, namespace=namespace)
+            logging.info("Deleted HPA %s/%s", namespace, name)
+        except ApiException as e:
+            if e.status != 404:
+                raise
+        return
+
+    min_replicas = autoscaling.get("minReplicas", 1)
+    max_replicas = autoscaling.get("maxReplicas", max(min_replicas, spec.get("replicas", 1)))
+    cpu_util = autoscaling.get("cpuUtilization", 80)
+
+    hpa = client.V2HorizontalPodAutoscaler(
+        metadata=client.V1ObjectMeta(name=name, namespace=namespace),
+        spec=client.V2HorizontalPodAutoscalerSpec(
+            min_replicas=min_replicas,
+            max_replicas=max_replicas,
+            scale_target_ref=client.V2CrossVersionObjectReference(
+                api_version="apps/v1",
+                kind="Deployment",
+                name=name,
+            ),
+            metrics=[
+                client.V2MetricSpec(
+                    type="Resource",
+                    resource=client.V2ResourceMetricSource(
+                        name="cpu",
+                        target=client.V2MetricTarget(
+                            type="Utilization",
+                            average_utilization=cpu_util,
+                        ),
+                    ),
+                )
+            ],
+        ),
+    )
+
+    try:
+        autoscaling_v2.read_namespaced_horizontal_pod_autoscaler(name=name, namespace=namespace)
+        autoscaling_v2.patch_namespaced_horizontal_pod_autoscaler(name=name, namespace=namespace, body=hpa)
+        logging.info("Patched HPA %s/%s", namespace, name)
+    except ApiException as e:
+        if e.status == 404:
+            autoscaling_v2.create_namespaced_horizontal_pod_autoscaler(namespace=namespace, body=hpa)
+            logging.info("Created HPA %s/%s", namespace, name)
+        else:
+            raise
+
+
 def delete_resources(apps_v1: client.AppsV1Api, core_v1: client.CoreV1Api, obj: Dict[str, Any]):
     name = obj.get("metadata", {}).get("name")
     namespace = get_namespace(obj)
@@ -141,6 +199,14 @@ def delete_resources(apps_v1: client.AppsV1Api, core_v1: client.CoreV1Api, obj: 
     try:
         core_v1.delete_namespaced_service(name=name, namespace=namespace)
         logging.info("Deleted Service %s/%s", namespace, name)
+    except ApiException as e:
+        if e.status != 404:
+            raise
+
+    try:
+        autoscaling_v2 = client.AutoscalingV2Api()
+        autoscaling_v2.delete_namespaced_horizontal_pod_autoscaler(name=name, namespace=namespace)
+        logging.info("Deleted HPA %s/%s", namespace, name)
     except ApiException as e:
         if e.status != 404:
             raise
@@ -178,9 +244,10 @@ def update_status(custom_api: client.CustomObjectsApi, apps_v1: client.AppsV1Api
         logging.error("Failed to update status for %s/%s: %s", namespace, name, e)
 
 
-def reconcile(apps_v1: client.AppsV1Api, core_v1: client.CoreV1Api, custom_api: client.CustomObjectsApi, obj: Dict[str, Any]):
+def reconcile(apps_v1: client.AppsV1Api, core_v1: client.CoreV1Api, autoscaling_v2: client.AutoscalingV2Api, custom_api: client.CustomObjectsApi, obj: Dict[str, Any]):
     ensure_deployment(apps_v1, obj)
     ensure_service(core_v1, obj)
+    ensure_hpa(autoscaling_v2, obj)
     update_status(custom_api, apps_v1, core_v1, obj)
 
 
@@ -190,6 +257,7 @@ def main():
 
     apps_v1 = client.AppsV1Api()
     core_v1 = client.CoreV1Api()
+    autoscaling_v2 = client.AutoscalingV2Api()
     custom_api = client.CustomObjectsApi()
 
     namespace = os.getenv("WATCH_NAMESPACE", "")
@@ -208,7 +276,7 @@ def main():
                     continue
 
                 if event_type in {"ADDED", "MODIFIED"}:
-                    reconcile(apps_v1, core_v1, custom_api, obj)
+                    reconcile(apps_v1, core_v1, autoscaling_v2, custom_api, obj)
                 elif event_type == "DELETED":
                     delete_resources(apps_v1, core_v1, obj)
         except Exception as exc:
