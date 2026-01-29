@@ -7,7 +7,7 @@ pillow
 google-generativeai
 python-dotenv
 sqlalchemy
-transformers
+transformers==4.46.2
 accelerate
 tritonclient[http]
 bitsandbytes

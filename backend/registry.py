@@ -8,9 +8,9 @@ class ModelRegistry:
     def register(self, model_instance: AIModel):
         """Register a new model instance"""
         print(f"Registering model: {model_instance.name}")
-        self._models[model_instance.name] = model_instance
         # In a real app, we might load lazily, but for now we load on register
         model_instance.load()
+        self._models[model_instance.name] = model_instance
 
     def get_model(self, name: str) -> AIModel:
         return self._models.get(name)

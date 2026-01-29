@@ -50,6 +50,9 @@ class MistralSmallQuantizedModel(AIModel):
     async def predict(self, input_data):
         loop = asyncio.get_running_loop()
 
+        if not hasattr(self, "model") or self.model is None:
+            raise RuntimeError("Model is not loaded. Check server logs for load errors.")
+
         def _run_inference():
             messages = [
                 {"role": "user", "content": input_data}
