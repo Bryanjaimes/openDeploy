@@ -424,6 +424,34 @@
                             <div class="meta-label">Tokens (last)</div>
                             <div class="meta-value" id="metric-tokens">--</div>
                         </div>
+                        <div class="meta-card">
+                            <div class="meta-label">GPU Utilization</div>
+                            <div class="meta-value" id="metric-gpu-util">--</div>
+                        </div>
+                        <div class="meta-card">
+                            <div class="meta-label">VRAM Usage</div>
+                            <div class="meta-value" id="metric-vram">--</div>
+                        </div>
+                        <div class="meta-card">
+                            <div class="meta-label">GPU Power</div>
+                            <div class="meta-value" id="metric-gpu-power">--</div>
+                        </div>
+                        <div class="meta-card">
+                            <div class="meta-label">Cost / Inference</div>
+                            <div class="meta-value" id="metric-cost-inference">--</div>
+                        </div>
+                        <div class="meta-card">
+                            <div class="meta-label">Throughput / $</div>
+                            <div class="meta-value" id="metric-throughput-dollar">--</div>
+                        </div>
+                        <div class="meta-card">
+                            <div class="meta-label">Price / Hour</div>
+                            <div class="meta-value" id="metric-price-hour">--</div>
+                        </div>
+                        <div class="meta-card">
+                            <div class="meta-label">Cost / 1K Tokens</div>
+                            <div class="meta-value" id="metric-cost-1k">--</div>
+                        </div>
                     </div>
                     <div style="font-size: 12px; color: #64748b;">Live metrics refresh every 10s.</div>
                 </div>
@@ -812,6 +840,25 @@
                 document.getElementById('metric-concurrency').textContent = data.active_requests ?? '--';
                 document.getElementById('metric-error-rate').textContent = data.error_rate_pct !== undefined ? `${data.error_rate_pct.toFixed(2)}%` : '--';
                 document.getElementById('metric-cold-start').textContent = formatMs(data.cold_start_ms);
+                document.getElementById('metric-price-hour').textContent = data.price_per_hour !== null && data.price_per_hour !== undefined ? `$${data.price_per_hour.toFixed(4)}` : '--';
+                document.getElementById('metric-cost-inference').textContent = data.cost_per_inference !== null && data.cost_per_inference !== undefined ? `$${data.cost_per_inference.toFixed(6)}` : '--';
+                document.getElementById('metric-throughput-dollar').textContent = data.throughput_per_dollar !== null && data.throughput_per_dollar !== undefined ? `${data.throughput_per_dollar.toFixed(4)} rps/$` : '--';
+                document.getElementById('metric-cost-1k').textContent = data.cost_per_1k_tokens !== null && data.cost_per_1k_tokens !== undefined ? `$${data.cost_per_1k_tokens.toFixed(4)}` : '--';
+
+                if (data.gpu && data.gpu.available) {
+                    const util = data.gpu.utilization_gpu_pct !== undefined ? `${Math.round(data.gpu.utilization_gpu_pct)}%` : '--';
+                    const vramUsed = data.gpu.vram_used_mb !== undefined ? Math.round(data.gpu.vram_used_mb) : '--';
+                    const vramTotal = data.gpu.vram_total_mb !== undefined ? Math.round(data.gpu.vram_total_mb) : '--';
+                    const vramPct = data.gpu.vram_used_pct !== undefined ? `${Math.round(data.gpu.vram_used_pct)}%` : '--';
+                    const power = data.gpu.power_watts !== undefined && data.gpu.power_watts !== null ? `${Math.round(data.gpu.power_watts)} W` : '--';
+                    document.getElementById('metric-gpu-util').textContent = util;
+                    document.getElementById('metric-vram').textContent = `${vramUsed}/${vramTotal} MB (${vramPct})`;
+                    document.getElementById('metric-gpu-power').textContent = power;
+                } else {
+                    document.getElementById('metric-gpu-util').textContent = '--';
+                    document.getElementById('metric-vram').textContent = '--';
+                    document.getElementById('metric-gpu-power').textContent = '--';
+                }
 
                 if (data.model_load_times_ms && data.model_load_times_ms[modelName]) {
                     document.getElementById('metric-model-load').textContent = formatMs(data.model_load_times_ms[modelName]);
