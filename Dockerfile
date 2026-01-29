@@ -20,7 +20,8 @@ RUN if [ "$BUILD_MODE" = "lite" ]; then \
         pip install --no-cache-dir -r requirements-lite.txt; \
     else \
         pip install --no-cache-dir -r requirements.txt; \
-    fi
+    fi \
+    && pip uninstall -y torchvision || true
 
 # Copy the current directory contents into the container at /app
 COPY . .
