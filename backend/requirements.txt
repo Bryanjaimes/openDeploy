@@ -1,8 +1,6 @@
 fastapi
 uvicorn
 python-multipart
-torch
-torchvision
 pillow
 google-generativeai
 python-dotenv
