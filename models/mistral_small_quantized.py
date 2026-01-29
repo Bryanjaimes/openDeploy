@@ -1,12 +1,16 @@
 import asyncio
+import re
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 from backend.interface import AIModel
 
 
-class MistralSmallQuantizedModel(AIModel):
-    @property
+        return {
+            "response": response_text,
+            "model": self.model_id,
+            "quantization": "4-bit"
+        }
     def name(self):
         return "mistral-small-24b-quantized"
 
@@ -53,6 +57,30 @@ class MistralSmallQuantizedModel(AIModel):
         if not hasattr(self, "model") or self.model is None:
             raise RuntimeError("Model is not loaded. Check server logs for load errors.")
 
+        user_prompt = (input_data or "").strip()
+
+        def _clean_response(text: str) -> str:
+            cleaned = (text or "").strip()
+
+            if user_prompt:
+                lowered = cleaned.lower()
+                prompt_lower = user_prompt.lower()
+                prompt_index = lowered.find(prompt_lower)
+                if prompt_index != -1:
+                    cleaned = cleaned[prompt_index + len(user_prompt):].lstrip(' \n\r:?-')
+
+            boilerplate_patterns = [
+                r"^You are .*?Large Language Model.*?(\n\n|\r\n\r\n)",
+                r"^You are .*?Mistral.*?(\n\n|\r\n\r\n)",
+                r"^Your knowledge base.*?(\n\n|\r\n\r\n)",
+                r"^The current date.*?(\n\n|\r\n\r\n)",
+                r"^When you're not sure.*?(\n\n|\r\n\r\n)"
+            ]
+            for pattern in boilerplate_patterns:
+                cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE | re.DOTALL)
+
+            return cleaned.strip() or text.strip()
+
         def _run_inference():
             messages = [
                 {"role": "user", "content": input_data}
@@ -83,6 +111,7 @@ class MistralSmallQuantizedModel(AIModel):
             return generated.strip()
 
         response_text = await loop.run_in_executor(None, _run_inference)
+        response_text = _clean_response(response_text)
         return {
             "response": response_text,
             "model": self.model_id,
