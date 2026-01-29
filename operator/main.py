@@ -146,9 +146,42 @@ def delete_resources(apps_v1: client.AppsV1Api, core_v1: client.CoreV1Api, obj: 
             raise
 
 
-def reconcile(apps_v1: client.AppsV1Api, core_v1: client.CoreV1Api, obj: Dict[str, Any]):
+def update_status(custom_api: client.CustomObjectsApi, apps_v1: client.AppsV1Api, core_v1: client.CoreV1Api, obj: Dict[str, Any]):
+    name = obj.get("metadata", {}).get("name")
+    namespace = get_namespace(obj)
+
+    try:
+        deployment = apps_v1.read_namespaced_deployment(name=name, namespace=namespace)
+        ready_replicas = deployment.status.ready_replicas or 0
+    except ApiException:
+        ready_replicas = 0
+
+    endpoint = f"http://{name}.{namespace}.svc.cluster.local"
+
+    status_body = {
+        "status": {
+            "readyReplicas": ready_replicas,
+            "endpoint": endpoint
+        }
+    }
+
+    try:
+        custom_api.patch_namespaced_custom_object_status(
+            GROUP,
+            VERSION,
+            namespace,
+            PLURAL,
+            name,
+            status_body,
+        )
+    except ApiException as e:
+        logging.error("Failed to update status for %s/%s: %s", namespace, name, e)
+
+
+def reconcile(apps_v1: client.AppsV1Api, core_v1: client.CoreV1Api, custom_api: client.CustomObjectsApi, obj: Dict[str, Any]):
     ensure_deployment(apps_v1, obj)
     ensure_service(core_v1, obj)
+    update_status(custom_api, apps_v1, core_v1, obj)
 
 
 def main():
@@ -175,7 +208,7 @@ def main():
                     continue
 
                 if event_type in {"ADDED", "MODIFIED"}:
-                    reconcile(apps_v1, core_v1, obj)
+                    reconcile(apps_v1, core_v1, custom_api, obj)
                 elif event_type == "DELETED":
                     delete_resources(apps_v1, core_v1, obj)
         except Exception as exc:
