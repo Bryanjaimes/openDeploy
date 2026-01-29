@@ -109,8 +109,14 @@ class MistralSmallQuantizedModel(AIModel):
 
         response_text = await loop.run_in_executor(None, _run_inference)
         response_text = _clean_response(response_text)
+        tokens_generated = None
+        try:
+            tokens_generated = len(self.tokenizer.encode(response_text))
+        except Exception:
+            tokens_generated = None
         return {
             "response": response_text,
             "model": self.model_id,
-            "quantization": "4-bit"
+            "quantization": "4-bit",
+            "tokens_generated": tokens_generated
         }

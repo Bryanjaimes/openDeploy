@@ -221,6 +221,13 @@
             word-break: break-word;
         }
 
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin: 16px 0 10px;
+        }
+
         .form-group { margin-bottom: 15px; }
         .form-group label { display: block; margin-bottom: 5px; font-weight: 500; font-size: 14px; color: #64748b; }
         .form-group input { width: 100%; padding: 8px; border: 1px solid var(--glass-border); border-radius: 10px; background: var(--glass); }
@@ -370,6 +377,57 @@
                     <!-- Dynamic Content -->
                 </div>
 
+                <div class="card" style="margin-top: 16px;">
+                    <h4 style="margin-top: 0;">Model Performance</h4>
+                    <div class="metrics-grid">
+                        <div class="meta-card">
+                            <div class="meta-label">P50 Latency</div>
+                            <div class="meta-value" id="metric-p50">--</div>
+                        </div>
+                        <div class="meta-card">
+                            <div class="meta-label">P95 Latency</div>
+                            <div class="meta-value" id="metric-p95">--</div>
+                        </div>
+                        <div class="meta-card">
+                            <div class="meta-label">P99 Latency</div>
+                            <div class="meta-value" id="metric-p99">--</div>
+                        </div>
+                        <div class="meta-card">
+                            <div class="meta-label">Requests / Sec</div>
+                            <div class="meta-value" id="metric-rps">--</div>
+                        </div>
+                        <div class="meta-card">
+                            <div class="meta-label">Active Requests</div>
+                            <div class="meta-value" id="metric-concurrency">--</div>
+                        </div>
+                        <div class="meta-card">
+                            <div class="meta-label">Error Rate</div>
+                            <div class="meta-value" id="metric-error-rate">--</div>
+                        </div>
+                        <div class="meta-card">
+                            <div class="meta-label">Cold Start</div>
+                            <div class="meta-value" id="metric-cold-start">--</div>
+                        </div>
+                        <div class="meta-card">
+                            <div class="meta-label">Model Load Time</div>
+                            <div class="meta-value" id="metric-model-load">--</div>
+                        </div>
+                        <div class="meta-card">
+                            <div class="meta-label">Last Compute</div>
+                            <div class="meta-value" id="metric-last-compute">--</div>
+                        </div>
+                        <div class="meta-card">
+                            <div class="meta-label">Tokens / Sec</div>
+                            <div class="meta-value" id="metric-tps">--</div>
+                        </div>
+                        <div class="meta-card">
+                            <div class="meta-label">Tokens (last)</div>
+                            <div class="meta-value" id="metric-tokens">--</div>
+                        </div>
+                    </div>
+                    <div style="font-size: 12px; color: #64748b;">Live metrics refresh every 10s.</div>
+                </div>
+
                 <div id="result-area" class="hidden">
                     <div class="result-container">
                         <div class="result-image">
@@ -435,6 +493,7 @@
     <script>
         const API_URL = `${window.location.protocol}//${window.location.hostname}:8000`;
         let currentModel = null;
+        let metricsTimer = null;
 
         function toggleChat() {
             const win = document.getElementById('chat-window');
@@ -605,6 +664,8 @@
             const isMedical = /eye|retina|retinopathy|diabetic|scanner|scan/i.test(model.name);
             patientInfo.style.display = isMedical ? 'grid' : 'none';
 
+            startMetricsPolling(model.name);
+
             // Tailored UI Logic
             if (model.name.includes('diabetic') || model.name.includes('retinopathy')) {
                  formContainer.innerHTML = `
@@ -722,6 +783,46 @@
             }
         }
 
+        function formatMs(value) {
+            if (value === null || value === undefined) return '--';
+            const rounded = Math.round(value);
+            return `${rounded} ms`;
+        }
+
+        function startMetricsPolling(modelName) {
+            if (metricsTimer) clearInterval(metricsTimer);
+            fetchMetrics(modelName);
+            metricsTimer = setInterval(() => fetchMetrics(modelName), 10000);
+        }
+
+        async function fetchMetrics(modelName) {
+            const apiKey = document.getElementById('api-key').value;
+            try {
+                const res = await fetch(`${API_URL}/metrics`, {
+                    headers: { 'X-API-Key': apiKey }
+                });
+
+                if (!res.ok) return;
+                const data = await res.json();
+
+                document.getElementById('metric-p50').textContent = formatMs(data.p50_ms);
+                document.getElementById('metric-p95').textContent = formatMs(data.p95_ms);
+                document.getElementById('metric-p99').textContent = formatMs(data.p99_ms);
+                document.getElementById('metric-rps').textContent = data.rps !== undefined ? data.rps.toFixed(2) : '--';
+                document.getElementById('metric-concurrency').textContent = data.active_requests ?? '--';
+                document.getElementById('metric-error-rate').textContent = data.error_rate_pct !== undefined ? `${data.error_rate_pct.toFixed(2)}%` : '--';
+                document.getElementById('metric-cold-start').textContent = formatMs(data.cold_start_ms);
+
+                if (data.model_load_times_ms && data.model_load_times_ms[modelName]) {
+                    document.getElementById('metric-model-load').textContent = formatMs(data.model_load_times_ms[modelName]);
+                } else {
+                    document.getElementById('metric-model-load').textContent = '--';
+                }
+            } catch (e) {
+                // ignore metrics polling errors
+            }
+        }
+
         async function runPrediction() {
             const resultArea = document.getElementById('result-area');
             const resultImage = document.querySelector('.result-image');
@@ -809,6 +910,19 @@
                     diagnosisBox.style.background = '#e3fcef';
                     diagnosisBox.style.color = '#0052cc';
                     diagnosisBox.style.border = '1px solid #0052cc';
+                }
+
+                if (data.metrics && data.metrics.compute_ms !== undefined) {
+                    document.getElementById('metric-last-compute').textContent = formatMs(data.metrics.compute_ms);
+                }
+
+                if (data.tokens_generated !== undefined && data.tokens_generated !== null) {
+                    document.getElementById('metric-tokens').textContent = data.tokens_generated;
+                    const computeMs = data.metrics && data.metrics.compute_ms ? data.metrics.compute_ms : null;
+                    if (computeMs && computeMs > 0) {
+                        const tps = (data.tokens_generated / (computeMs / 1000)).toFixed(2);
+                        document.getElementById('metric-tps').textContent = `${tps} tok/s`;
+                    }
                 }
 
                 if (data.confidence) {

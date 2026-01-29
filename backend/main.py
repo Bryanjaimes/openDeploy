@@ -1,8 +1,9 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Security, Depends, status, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Security, Depends, status, Form, Request
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Any, Optional
 from contextlib import asynccontextmanager
+import time
 import os
 from dotenv import load_dotenv
 
@@ -14,6 +15,7 @@ from backend.loader import load_plugins
 from backend.gen_ui import generate_ui_from_prompt
 from backend.database import init_db, get_db, Prediction
 from backend.cloud_optimizer import optimizer
+from backend.metrics import metrics_store
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
@@ -70,6 +72,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def metrics_middleware(request: Request, call_next):
+    start = time.perf_counter()
+    is_predict = request.url.path.startswith("/models/") and request.url.path.endswith("/predict")
+    if is_predict:
+        metrics_store.inc_active()
+    response = None
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        duration_ms = (time.perf_counter() - start) * 1000.0
+        if is_predict:
+            status_code = getattr(response, "status_code", 500)
+            metrics_store.record_request(duration_ms, status_code)
+            metrics_store.dec_active()
+
 @app.get("/")
 def read_root():
     return {"message": "Welcome to OpenDeploy v2. Platform is running."}
@@ -100,6 +120,7 @@ async def predict(model_name: str, file: UploadFile = File(None), text_input: st
 
     result = None
     input_summary = ""
+    compute_start = time.perf_counter()
 
     # Simple routing based on input type
     if model.input_type == "text":
@@ -119,6 +140,15 @@ async def predict(model_name: str, file: UploadFile = File(None), text_input: st
     else:
         raise HTTPException(status_code=500, detail="Unsupported model input type")
 
+    compute_ms = (time.perf_counter() - compute_start) * 1000.0
+    metrics_store.record_compute(compute_ms)
+
+    if isinstance(result, dict):
+        result.setdefault("metrics", {})
+        result["metrics"].update({
+            "compute_ms": compute_ms
+        })
+
     # Save to history
     db_prediction = Prediction(
         model=model_name,
@@ -130,6 +160,15 @@ async def predict(model_name: str, file: UploadFile = File(None), text_input: st
     db.refresh(db_prediction)
 
     return result
+
+
+@app.get("/metrics", dependencies=[Depends(get_api_key)])
+def get_metrics():
+    snapshot = metrics_store.snapshot()
+    return {
+        **snapshot,
+        "model_load_times_ms": metrics_store.model_load_times
+    }
 
 class GenUIRequest(BaseModel):
     prompt: str
