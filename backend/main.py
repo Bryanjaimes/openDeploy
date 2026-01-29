@@ -118,6 +118,12 @@ async def predict(model_name: str, file: UploadFile = File(None), text_input: st
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
 
+    if hasattr(model, "ready") and not getattr(model, "ready", False):
+        start = time.perf_counter()
+        model.load()
+        duration_ms = (time.perf_counter() - start) * 1000.0
+        metrics_store.record_model_load(model.name, duration_ms)
+
     result = None
     input_summary = ""
     compute_start = time.perf_counter()

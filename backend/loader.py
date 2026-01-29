@@ -3,11 +3,9 @@ import os
 import sys
 import inspect
 import logging
-import time
 from typing import List
 from backend.interface import AIModel
 from backend.registry import registry
-from backend.metrics import metrics_store
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -48,10 +46,7 @@ def load_plugins(models_dir: str = "models"):
                         logger.info(f"   Found model class: {name}")
                         try:
                             instance = obj()
-                            start = time.perf_counter()
                             registry.register(instance)
-                            duration_ms = (time.perf_counter() - start) * 1000.0
-                            metrics_store.record_model_load(instance.name, duration_ms)
                             logger.info(f"   ✅ Deployed: {instance.name}")
                         except Exception as e:
                             logger.error(f"   ❌ Failed to initialize {name}: {e}")

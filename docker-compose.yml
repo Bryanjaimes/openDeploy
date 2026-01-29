@@ -14,6 +14,7 @@ services:
     environment:
       - ENV=development
       - OPENDEPLOY_API_KEY=secret-key-123
+      - OPENDEPLOY_LAZY_LOAD=true
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
       - NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
