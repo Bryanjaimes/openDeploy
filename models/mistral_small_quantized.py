@@ -6,11 +6,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from backend.interface import AIModel
 
 
-        return {
-            "response": response_text,
-            "model": self.model_id,
-            "quantization": "4-bit"
-        }
+class MistralSmallQuantizedModel(AIModel):
+    @property
     def name(self):
         return "mistral-small-24b-quantized"
 
