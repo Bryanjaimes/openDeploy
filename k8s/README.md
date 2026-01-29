@@ -20,6 +20,13 @@ kubectl apply -f k8s/rbac.yaml
 kubectl apply -f k8s/operator-deployment.yaml
 ```
 
+## Build operator image
+
+```bash
+docker build -t ghcr.io/bryanjaimes/opendeploy-operator:dev -f operator/Dockerfile .
+docker push ghcr.io/bryanjaimes/opendeploy-operator:dev
+```
+
 ## Apply sample OpenDeploy resource
 
 ```bash
