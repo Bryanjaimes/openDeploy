@@ -103,6 +103,6 @@ ssh $SSH_OPTS -t $TARGET "bash -s" << EOF
     echo "---------------------------------------------------"
     echo "🌍 UI:  http://\$PUBLIC_IP:3000"
     echo "🔌 API: http://\$PUBLIC_IP:8000"
-    echo "🔑 Key: $API_KEY"
+    echo "🔑 Key: [redacted]"
     echo "---------------------------------------------------"
 EOF
