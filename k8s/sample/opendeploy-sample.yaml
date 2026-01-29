@@ -1,0 +1,18 @@
+apiVersion: opendeploy.dev/v1alpha1
+kind: OpenDeploy
+metadata:
+  name: mistral-24b
+spec:
+  model: mistral-small-24b-quantized
+  image: ghcr.io/bryanjaimes/opendeploy-api:latest
+  replicas: 1
+  resources:
+    cpu: "4"
+    memory: "32Gi"
+    gpu: "1"
+  env:
+    - name: OPENDEPLOY_API_KEY
+      value: secret-key-123
+    - name: OPENDEPLOY_LAZY_LOAD
+      value: "true"
+  port: 8000

@@ -1,0 +1,69 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: opendeploys.opendeploy.dev
+spec:
+  group: opendeploy.dev
+  scope: Namespaced
+  names:
+    plural: opendeploys
+    singular: opendeploy
+    kind: OpenDeploy
+    shortNames:
+      - od
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [model, replicas]
+              properties:
+                model:
+                  type: string
+                image:
+                  type: string
+                replicas:
+                  type: integer
+                  minimum: 0
+                resources:
+                  type: object
+                  properties:
+                    cpu:
+                      type: string
+                    memory:
+                      type: string
+                    gpu:
+                      type: string
+                env:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      value:
+                        type: string
+                port:
+                  type: integer
+                  default: 8000
+                autoscaling:
+                  type: object
+                  properties:
+                    minReplicas:
+                      type: integer
+                    maxReplicas:
+                      type: integer
+                    cpuUtilization:
+                      type: integer
+            status:
+              type: object
+              properties:
+                readyReplicas:
+                  type: integer
+                endpoint:
+                  type: string

@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opendeploy-operator
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opendeploy-operator
+  template:
+    metadata:
+      labels:
+        app: opendeploy-operator
+    spec:
+      serviceAccountName: opendeploy-operator
+      containers:
+        - name: operator
+          image: ghcr.io/bryanjaimes/opendeploy-operator:dev
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: LOG_LEVEL
+              value: info
