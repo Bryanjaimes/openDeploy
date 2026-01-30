@@ -9,6 +9,9 @@ from kubernetes.client.rest import ApiException
 GROUP = "opendeploy.dev"
 VERSION = "v1alpha1"
 PLURAL = "opendeploys"
+KEDA_GROUP = "keda.sh"
+KEDA_VERSION = "v1alpha1"
+KEDA_PLURAL = "scaledobjects"
 
 
 def load_kube_config():
@@ -186,6 +189,92 @@ def ensure_hpa(autoscaling_v2: client.AutoscalingV2Api, obj: Dict[str, Any]):
             raise
 
 
+def ensure_keda_scaled_object(custom_api: client.CustomObjectsApi, obj: Dict[str, Any]):
+    metadata = obj.get("metadata", {})
+    spec = obj.get("spec", {})
+    keda = spec.get("keda") or {}
+    name = metadata.get("name")
+    namespace = get_namespace(obj)
+
+    if not keda or not keda.get("triggers"):
+        try:
+            custom_api.delete_namespaced_custom_object(
+                KEDA_GROUP,
+                KEDA_VERSION,
+                namespace,
+                KEDA_PLURAL,
+                name,
+            )
+            logging.info("Deleted KEDA ScaledObject %s/%s", namespace, name)
+        except ApiException as e:
+            if e.status != 404:
+                logging.warning("Failed to delete KEDA ScaledObject %s/%s: %s", namespace, name, e)
+        return
+
+    min_replicas = keda.get("minReplicas", 0)
+    max_replicas = keda.get("maxReplicas", max(1, spec.get("replicas", 1)))
+    polling_interval = keda.get("pollingInterval", 10)
+    cooldown_period = keda.get("cooldownPeriod", 60)
+
+    labels = {
+        "app": "opendeploy",
+        "opendeploy/name": name,
+    }
+
+    scaled_object = {
+        "apiVersion": f"{KEDA_GROUP}/{KEDA_VERSION}",
+        "kind": "ScaledObject",
+        "metadata": {
+            "name": name,
+            "namespace": namespace,
+            "labels": labels,
+        },
+        "spec": {
+            "scaleTargetRef": {"name": name},
+            "minReplicaCount": min_replicas,
+            "maxReplicaCount": max_replicas,
+            "pollingInterval": polling_interval,
+            "cooldownPeriod": cooldown_period,
+            "triggers": keda.get("triggers", []),
+        },
+    }
+
+    if keda.get("advanced"):
+        scaled_object["spec"]["advanced"] = keda["advanced"]
+    if keda.get("fallback"):
+        scaled_object["spec"]["fallback"] = keda["fallback"]
+
+    try:
+        custom_api.get_namespaced_custom_object(KEDA_GROUP, KEDA_VERSION, namespace, KEDA_PLURAL, name)
+        custom_api.patch_namespaced_custom_object(
+            KEDA_GROUP,
+            KEDA_VERSION,
+            namespace,
+            KEDA_PLURAL,
+            name,
+            scaled_object,
+        )
+        logging.info("Patched KEDA ScaledObject %s/%s", namespace, name)
+    except ApiException as e:
+        if e.status == 404:
+            try:
+                custom_api.create_namespaced_custom_object(
+                    KEDA_GROUP,
+                    KEDA_VERSION,
+                    namespace,
+                    KEDA_PLURAL,
+                    scaled_object,
+                )
+                logging.info("Created KEDA ScaledObject %s/%s", namespace, name)
+            except ApiException as create_error:
+                if create_error.status == 404:
+                    logging.warning("KEDA CRDs not found; skipping ScaledObject for %s/%s", namespace, name)
+                else:
+                    raise
+        else:
+            raise
+
+
 def delete_resources(apps_v1: client.AppsV1Api, core_v1: client.CoreV1Api, obj: Dict[str, Any]):
     name = obj.get("metadata", {}).get("name")
     namespace = get_namespace(obj)
@@ -210,6 +299,20 @@ def delete_resources(apps_v1: client.AppsV1Api, core_v1: client.CoreV1Api, obj: 
     except ApiException as e:
         if e.status != 404:
             raise
+
+    try:
+        custom_api = client.CustomObjectsApi()
+        custom_api.delete_namespaced_custom_object(
+            KEDA_GROUP,
+            KEDA_VERSION,
+            namespace,
+            KEDA_PLURAL,
+            name,
+        )
+        logging.info("Deleted KEDA ScaledObject %s/%s", namespace, name)
+    except ApiException as e:
+        if e.status != 404:
+            logging.warning("Failed to delete KEDA ScaledObject %s/%s: %s", namespace, name, e)
 
 
 def update_status(custom_api: client.CustomObjectsApi, apps_v1: client.AppsV1Api, core_v1: client.CoreV1Api, obj: Dict[str, Any]):
@@ -248,6 +351,7 @@ def reconcile(apps_v1: client.AppsV1Api, core_v1: client.CoreV1Api, autoscaling_
     ensure_deployment(apps_v1, obj)
     ensure_service(core_v1, obj)
     ensure_hpa(autoscaling_v2, obj)
+    ensure_keda_scaled_object(custom_api, obj)
     update_status(custom_api, apps_v1, core_v1, obj)
 
 

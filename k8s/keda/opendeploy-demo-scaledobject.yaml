@@ -11,6 +11,12 @@ spec:
   cooldownPeriod: 60
   pollingInterval: 10
   triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
+        metricName: opendeploy_rps
+        query: sum(rate(opendeploy_requests_total{service="opendeploy-demo"}[1m]))
+        threshold: "1"
     - type: cpu
       metadata:
         value: "70"

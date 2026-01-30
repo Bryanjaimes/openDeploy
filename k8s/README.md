@@ -52,6 +52,23 @@ Requires KEDA installed in the cluster.
 kubectl apply -f k8s/keda/opendeploy-demo-scaledobject.yaml
 ```
 
+Or configure KEDA triggers directly on the OpenDeploy resource:
+
+```yaml
+keda:
+  minReplicas: 0
+  maxReplicas: 5
+  pollingInterval: 10
+  cooldownPeriod: 60
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
+        metricName: opendeploy_rps
+        query: sum(rate(opendeploy_requests_total{service="opendeploy-demo"}[1m]))
+        threshold: "1"
+```
+
 ## Karpenter (node provisioning)
 
 Requires Karpenter installed and a discovery tag on subnets/security groups.
@@ -63,5 +80,4 @@ kubectl apply -f k8s/karpenter/opendeploy-nodepool.yaml
 
 ## Next steps
 
-- Wire KEDA triggers to request rate (HTTP/RPS)
 - Add Prometheus metrics adapter for autoscaling signals

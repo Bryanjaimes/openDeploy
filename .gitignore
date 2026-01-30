@@ -127,6 +127,9 @@ secrets/
 *.key
 *.pem
 *.crt
+*.cer
+*.pfx
+frontend/certs/
 
 # Monitoring
 grafana/data/

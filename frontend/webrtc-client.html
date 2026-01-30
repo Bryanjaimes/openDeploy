@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenDeploy WebRTC Client</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        background: #0b0f1a;
+        color: #e6edf3;
+        margin: 0;
+        padding: 24px;
+      }
+      .panel {
+        max-width: 920px;
+        margin: 0 auto;
+        background: #111827;
+        border: 1px solid #1f2937;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+      }
+      h1 {
+        margin-top: 0;
+        font-size: 24px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        color: #9ca3af;
+        margin-bottom: 6px;
+      }
+      input, button {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #1f2937;
+        padding: 10px 12px;
+        font-size: 14px;
+        background: #0b1220;
+        color: #e6edf3;
+      }
+      button {
+        cursor: pointer;
+        background: #2563eb;
+        border-color: #2563eb;
+        font-weight: 600;
+      }
+      button.secondary {
+        background: #0b1220;
+        border-color: #374151;
+      }
+      video, canvas {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid #1f2937;
+        background: #0b1220;
+      }
+      .status {
+        margin-top: 12px;
+        font-size: 13px;
+        color: #9ca3af;
+      }
+      .metrics {
+        white-space: pre-wrap;
+        background: #0b1220;
+        border: 1px solid #1f2937;
+        padding: 12px;
+        border-radius: 10px;
+        margin-top: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <h1>OpenDeploy WebRTC Client</h1>
+      <p>Streams camera frames over a WebRTC DataChannel to the gateway and requests inference from the API.</p>
+
+      <div class="row">
+        <div>
+          <label for="gateway">WebRTC Gateway URL</label>
+          <input id="gateway" value="" />
+        </div>
+        <div>
+          <label for="api">API URL</label>
+          <input id="api" value="" />
+        </div>
+      </div>
+
+      <div class="row" style="margin-top: 12px;">
+        <div>
+          <label for="apiKey">API Key</label>
+          <input id="apiKey" placeholder="Enter API key" />
+        </div>
+        <div>
+          <label for="interval">Frame Interval (ms)</label>
+          <input id="interval" value="100" type="number" min="10" />
+        </div>
+      </div>
+
+      <div class="row" style="margin-top: 12px;">
+        <div>
+          <button id="start">Start Stream</button>
+        </div>
+        <div>
+          <button id="stop" class="secondary">Stop</button>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top: 16px;">
+        <div>
+          <label>Camera Preview</label>
+          <video id="preview" autoplay playsinline muted></video>
+        </div>
+        <div>
+          <label>Capture Buffer</label>
+          <canvas id="buffer" width="640" height="480"></canvas>
+        </div>
+      </div>
+
+      <div class="status" id="status">Idle.</div>
+      <div class="metrics" id="metrics"></div>
+    </div>
+
+    <script>
+      const startButton = document.getElementById("start");
+      const stopButton = document.getElementById("stop");
+      const statusEl = document.getElementById("status");
+      const metricsEl = document.getElementById("metrics");
+      const preview = document.getElementById("preview");
+      const canvas = document.getElementById("buffer");
+      const ctx = canvas.getContext("2d");
+      const gatewayInput = document.getElementById("gateway");
+      const apiInput = document.getElementById("api");
+
+      let peerConnection;
+      let dataChannel;
+      let stream;
+      let timer;
+
+      if (!gatewayInput.value) {
+        gatewayInput.value = `${window.location.origin}/webrtc`;
+      }
+      if (!apiInput.value) {
+        apiInput.value = `${window.location.origin}/api`;
+      }
+
+      function setStatus(text) {
+        statusEl.textContent = text;
+      }
+
+      function setMetrics(data) {
+        metricsEl.textContent = data ? JSON.stringify(data, null, 2) : "";
+      }
+
+      async function createOffer() {
+        const gatewayUrl = document.getElementById("gateway").value.replace(/\/$/, "");
+        const apiUrl = document.getElementById("api").value.replace(/\/$/, "");
+        const apiKey = document.getElementById("apiKey").value;
+
+        peerConnection = new RTCPeerConnection();
+        dataChannel = peerConnection.createDataChannel("frames");
+
+        const localStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 640, height: 480 },
+          audio: false,
+        });
+        stream = localStream;
+        preview.srcObject = localStream;
+
+        peerConnection.addTrack(localStream.getVideoTracks()[0], localStream);
+
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+
+        const response = await fetch(`${gatewayUrl}/offer`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-Key": apiKey,
+          },
+          body: JSON.stringify({ sdp: offer.sdp, type: offer.type }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to get answer from gateway");
+        }
+
+        const answer = await response.json();
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+
+        dataChannel.onopen = () => {
+          setStatus("Streaming frames...");
+          const intervalMs = Number(document.getElementById("interval").value || 100);
+          timer = setInterval(() => sendFrame(apiUrl, apiKey), intervalMs);
+        };
+
+        dataChannel.onclose = () => {
+          setStatus("DataChannel closed");
+        };
+
+        dataChannel.onerror = (err) => {
+          console.error(err);
+          setStatus("DataChannel error");
+        };
+      }
+
+      function encodeFrame(imageData) {
+        const width = imageData.width;
+        const height = imageData.height;
+        const format = 1; // RGB
+        const rgb = new Uint8Array(width * height * 3);
+
+        let srcIndex = 0;
+        let dstIndex = 0;
+        const data = imageData.data;
+        while (srcIndex < data.length) {
+          rgb[dstIndex++] = data[srcIndex];
+          rgb[dstIndex++] = data[srcIndex + 1];
+          rgb[dstIndex++] = data[srcIndex + 2];
+          srcIndex += 4;
+        }
+
+        const header = new ArrayBuffer(12);
+        const view = new DataView(header);
+        view.setUint32(0, width, true);
+        view.setUint32(4, height, true);
+        view.setUint32(8, format, true);
+
+        const payload = new Uint8Array(12 + rgb.length);
+        payload.set(new Uint8Array(header), 0);
+        payload.set(rgb, 12);
+
+        return payload;
+      }
+
+      async function sendFrame(apiUrl, apiKey) {
+        if (!dataChannel || dataChannel.readyState !== "open") {
+          return;
+        }
+        ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const payload = encodeFrame(imageData);
+        dataChannel.send(payload);
+
+        try {
+          const response = await fetch(`${apiUrl}/vision/stream/predict`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-Key": apiKey,
+            },
+            body: JSON.stringify({ model: "diabetic-retinopathy-glaucoma-detector" }),
+          });
+          if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+          }
+          const data = await response.json();
+          setMetrics(data.metrics || data);
+        } catch (err) {
+          setStatus(err.message);
+        }
+      }
+
+      async function stopStream() {
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+        if (dataChannel) {
+          dataChannel.close();
+          dataChannel = null;
+        }
+        if (peerConnection) {
+          peerConnection.close();
+          peerConnection = null;
+        }
+        if (stream) {
+          stream.getTracks().forEach((track) => track.stop());
+          stream = null;
+        }
+        setStatus("Stopped.");
+      }
+
+      startButton.addEventListener("click", async () => {
+        setStatus("Connecting...");
+        setMetrics("");
+        try {
+          await createOffer();
+        } catch (err) {
+          console.error(err);
+          setStatus(err.message || "Failed to start");
+        }
+      });
+
+      stopButton.addEventListener("click", () => {
+        stopStream();
+      });
+    </script>
+  </body>
+</html>

@@ -7,17 +7,24 @@ services:
       args:
         BUILD_MODE: ${BUILD_MODE:-full}
         BASE_IMAGE: ${BASE_IMAGE:-python:3.10-slim}
-    ports:
-      - "8000:8000"
+    ipc: host
     volumes:
       - ./models:/app/models # Mount models directory for hot-reloading models
     environment:
       - ENV=development
-      - OPENDEPLOY_API_KEY=secret-key-123
+      - OPENDEPLOY_API_KEY=${OPENDEPLOY_API_KEY}
+      - OPENDEPLOY_ALLOWED_ORIGINS=${OPENDEPLOY_ALLOWED_ORIGINS:-https://localhost:3443,https://127.0.0.1:3443,https://192.168.1.154:3443}
+      - OPENDEPLOY_RATE_LIMIT_PER_MIN=${OPENDEPLOY_RATE_LIMIT_PER_MIN:-60}
+      - OPENDEPLOY_MAX_BODY_MB=${OPENDEPLOY_MAX_BODY_MB:-10}
+      - OPENDEPLOY_MAX_FRAME_WIDTH=${OPENDEPLOY_MAX_FRAME_WIDTH:-1920}
+      - OPENDEPLOY_MAX_FRAME_HEIGHT=${OPENDEPLOY_MAX_FRAME_HEIGHT:-1080}
+      - OPENDEPLOY_MAX_FRAME_BYTES=${OPENDEPLOY_MAX_FRAME_BYTES:-8294400}
       - OPENDEPLOY_LAZY_LOAD=true
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
       - NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
+      - OPENDEPLOY_SHM_PATH=/dev/shm/opendeploy_frames
+      - OPENDEPLOY_SHM_SIZE=16777216
     deploy:
       resources:
         reservations:
@@ -27,11 +34,28 @@ services:
               capabilities: [gpu]
     restart: always
 
+  webrtc-gateway:
+    build:
+      context: ./webrtc-gateway
+    ipc: host
+    environment:
+      - WEBRTC_HTTP_ADDR=:7000
+      - OPENDEPLOY_API_KEY=${OPENDEPLOY_API_KEY}
+      - OPENDEPLOY_ALLOWED_ORIGINS=${OPENDEPLOY_ALLOWED_ORIGINS:-https://localhost:3443,https://127.0.0.1:3443,https://192.168.1.154:3443}
+      - OPENDEPLOY_MAX_FRAME_WIDTH=${OPENDEPLOY_MAX_FRAME_WIDTH:-1920}
+      - OPENDEPLOY_MAX_FRAME_HEIGHT=${OPENDEPLOY_MAX_FRAME_HEIGHT:-1080}
+      - OPENDEPLOY_MAX_FRAME_BYTES=${OPENDEPLOY_MAX_FRAME_BYTES:-8294400}
+      - OPENDEPLOY_SHM_PATH=/dev/shm/opendeploy_frames
+      - OPENDEPLOY_SHM_SIZE=16777216
+    restart: always
+
   frontend:
     image: nginx:alpine
     ports:
-      - "3000:80"
+      - "3001:80"
+      - "3443:443"
     volumes:
       - ./frontend:/usr/share/nginx/html
       - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend/certs:/etc/nginx/certs:ro
     restart: always

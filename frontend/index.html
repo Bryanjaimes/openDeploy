@@ -321,13 +321,18 @@
         <div class="header">
             <div></div>
             <div class="api-key-container">
-                <input type="password" id="api-key" placeholder="API Key" value="secret-key-123">
+                <input type="password" id="api-key" placeholder="API Key">
                 <button class="btn" onclick="fetchModels()">Connect</button>
             </div>
         </div>
 
         <!-- Model Selection View -->
         <div id="dashboard-view">
+            <div class="card">
+                <h3 style="margin-top: 0;">Vision Stream Model</h3>
+                <p style="margin: 6px 0 14px; color: #64748b;">diabetic-retinopathy-glaucoma-detector</p>
+                <button class="btn" onclick="window.open('webrtc-client.html', '_blank')">Open WebRTC Stream</button>
+            </div>
             <h3>Available Models</h3>
             <div id="model-list" class="model-grid">
                 <div class="card">Click 'Connect' to load available diagnostic models...</div>
