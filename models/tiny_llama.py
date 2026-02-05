@@ -67,9 +67,7 @@ class TinyLlamaModel(AIModel):
         # Run blocking inference in a thread pool
         response_text = await loop.run_in_executor(None, _run_inference)
 
-        return {"response": response_text}
-
         return {
-            "response": response,
+            "response": response_text,
             "model": "TinyLlama-1.1B-Chat"
         }

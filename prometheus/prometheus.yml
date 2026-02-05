@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: opendeploy-api
+    metrics_path: /metrics/prometheus
+    scheme: http
+    static_configs:
+      - targets: ["api:8000"]

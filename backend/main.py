@@ -1,31 +1,29 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Security, Depends, status, Form, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Security, Depends, status, Form, Request, Response
 from fastapi.security import APIKeyHeader
 from starlette.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Any, Optional, Dict, Tuple
+from typing import Optional, Dict, Tuple
 from contextlib import asynccontextmanager
 import time
 import os
+import logging
 import threading
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file
 load_dotenv()
 
 from backend.registry import registry
 from backend.loader import load_plugins
-from backend.gen_ui import generate_ui_from_prompt
 from backend.database import init_db, get_db, Prediction
-from backend.cloud_optimizer import optimizer
 from backend.metrics import metrics_store
+from backend.metrics_prom import REQUESTS_TOTAL, REQUEST_LATENCY_MS, ACTIVE_REQUESTS, COMPUTE_MS, MODEL_LOAD_MS
 from backend.shm_frames import SharedMemoryFrameReader
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-
-try:
-    import google.generativeai as genai
-except Exception:
-    genai = None
 
 # --- Security Setup ---
 API_KEY_NAME = "X-API-Key"
@@ -127,16 +125,20 @@ async def metrics_middleware(request: Request, call_next):
     is_predict = request.url.path.startswith("/models/") and request.url.path.endswith("/predict")
     if is_predict:
         metrics_store.inc_active()
+        ACTIVE_REQUESTS.inc()
     response = None
     try:
         response = await call_next(request)
         return response
     finally:
         duration_ms = (time.perf_counter() - start) * 1000.0
+        REQUEST_LATENCY_MS.labels(request.url.path, request.method).observe(duration_ms)
+        status_code = getattr(response, "status_code", 500)
+        REQUESTS_TOTAL.labels(request.url.path, request.method, str(status_code)).inc()
         if is_predict:
-            status_code = getattr(response, "status_code", 500)
             metrics_store.record_request(duration_ms, status_code)
             metrics_store.dec_active()
+            ACTIVE_REQUESTS.dec()
 
 @app.get("/")
 def read_root():
@@ -171,6 +173,7 @@ async def predict(model_name: str, file: UploadFile = File(None), text_input: st
         model.load()
         duration_ms = (time.perf_counter() - start) * 1000.0
         metrics_store.record_model_load(model.name, duration_ms)
+        MODEL_LOAD_MS.labels(model.name).observe(duration_ms)
 
     result = None
     input_summary = ""
@@ -196,6 +199,7 @@ async def predict(model_name: str, file: UploadFile = File(None), text_input: st
 
     compute_ms = (time.perf_counter() - compute_start) * 1000.0
     metrics_store.record_compute(compute_ms)
+    COMPUTE_MS.observe(compute_ms)
 
     if isinstance(result, dict):
         result.setdefault("metrics", {})
@@ -231,6 +235,7 @@ async def predict_stream(request: StreamPredictRequest, db: Session = Depends(ge
         model.load()
         duration_ms = (time.perf_counter() - start) * 1000.0
         metrics_store.record_model_load(model.name, duration_ms)
+        MODEL_LOAD_MS.labels(model.name).observe(duration_ms)
 
     frame = shm_reader.read_latest()
     if not frame:
@@ -245,6 +250,7 @@ async def predict_stream(request: StreamPredictRequest, db: Session = Depends(ge
     result = await model.predict(image_bytes)
     compute_ms = (time.perf_counter() - compute_start) * 1000.0
     metrics_store.record_compute(compute_ms)
+    COMPUTE_MS.observe(compute_ms)
 
     if isinstance(result, dict):
         result.setdefault("metrics", {})
@@ -275,68 +281,21 @@ def get_metrics():
         "model_load_times_ms": metrics_store.model_load_times
     }
 
-class GenUIRequest(BaseModel):
-    prompt: str
 
-@app.post("/generate-ui", dependencies=[Depends(get_api_key)])
-async def generate_ui(request: GenUIRequest):
-    """
-    Generates HTML UI components based on a natural language prompt.
-    """
-    html = generate_ui_from_prompt(request.prompt)
-    return {"html": html}
+def get_metrics_token_header() -> Optional[str]:
+    token = os.getenv("OPENDEPLOY_METRICS_TOKEN")
+    return token.strip() if token else None
 
-class ChatRequest(BaseModel):
-    message: str
 
-@app.post("/chat", dependencies=[Depends(get_api_key)])
-async def chat(request: ChatRequest):
-    """
-    Chat with an AI assistant about the UI/platform.
-    Uses Gemini AI for intelligent conversation.
-    """
-    api_key = os.getenv("GEMINI_API_KEY")
-    
-    # Fallback if no API key
-    if not api_key or genai is None:
-        message = request.message.lower()
-        ui_keywords = ["add", "create", "make", "field", "input", "button", "form"]
-        if any(kw in message for kw in ui_keywords):
-            return {"response": "I'll create that for you!", "action": "generate_ui", "prompt": request.message}
-        return {"response": "I can help you customize this interface!", "action": "none"}
-    
-    # Use Gemini AI
-    try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('models/gemini-2.5-flash')
-        
-        system_prompt = """You are a helpful UI assistant for OpenDeploy, a medical AI platform.
-        
-When users request UI changes (like "add patient field" or "create a dropdown"):
-- Respond: "I'll create that for you!"
-- Return: {"response": "your message", "action": "generate_ui", "prompt": "clear description of what to generate"}
+@app.get("/metrics/prometheus")
+def get_prometheus_metrics(request: Request):
+    token = get_metrics_token_header()
+    if token:
+        if request.headers.get("X-Metrics-Token") != token:
+            raise HTTPException(status_code=403, detail="Missing or invalid metrics token")
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
-When users ask questions:
-- Respond conversationally
-- Return: {"response": "your message", "action": "none"}
 
-Always return valid JSON with 'response', 'action', and optionally 'prompt' fields."""
-        
-        response = model.generate_content(f"{system_prompt}\n\nUser: {request.message}")
-        
-        # Parse JSON from response
-        import json, re
-        text = response.text.strip()
-        json_match = re.search(r'\{.*\}', text, re.DOTALL)
-        
-        if json_match:
-            return json.loads(json_match.group())
-        else:
-            return {"response": text, "action": "none"}
-            
-    except Exception as e:
-        print(f"Gemini error: {e}")
-        return {"response": "I'm here to help! What would you like to add?", "action": "none"}
 
 class GenerateRequest(BaseModel):
     prompt: str
@@ -378,29 +337,5 @@ async def generate(request: GenerateRequest, db: Session = Depends(get_db)):
         return {"model": model_name, **result}
     return {"model": model_name, "response": result}
 
-class CloudRecommendRequest(BaseModel):
-    model_name: str
-    provider: str = None
 
-@app.post("/deploy/recommend", dependencies=[Depends(get_api_key)])
-async def recommend_cloud(request: CloudRecommendRequest):
-    """
-    Analyzes a model's requirements and recommends the best cloud instance.
-    """
-    model = registry.get_model(request.model_name)
-    if not model:
-        raise HTTPException(status_code=404, detail="Model not found")
-    
-    # Use model's self-reported requirements
-    reqs = model.hardware_requirements
-    min_ram = reqs.get("min_ram", 1)
-    min_vram = reqs.get("min_vram", 0)
-    
-    recommendation = optimizer.recommend(
-        min_ram=min_ram, 
-        min_vram=min_vram, 
-        preferred_provider=request.provider
-    )
-    
-    return recommendation
 

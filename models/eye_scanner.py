@@ -1,4 +1,5 @@
 import io
+import logging
 import os
 import numpy as np
 import torch
@@ -6,6 +7,8 @@ import torch.nn as nn
 from torchvision import models, transforms
 from PIL import Image
 from backend.interface import AIModel
+
+logger = logging.getLogger(__name__)
 
 class EyeScannerModel(AIModel):
     @property
@@ -17,7 +20,7 @@ class EyeScannerModel(AIModel):
         return "image"
 
     def load(self):
-        print("Loading ResNet-18 (Lightweight)...")
+        logger.info("Loading ResNet-18 (Lightweight)...")
 
         # Optional Triton path
         triton_url = os.getenv("TRITON_URL")
@@ -43,7 +46,7 @@ class EyeScannerModel(AIModel):
             ])
 
             self.ready = True
-            print(f"✅ Eye Scanner using Triton at {triton_url} (model: {self.triton_model_name})")
+            logger.info("✅ Eye Scanner using Triton at %s (model: %s)", triton_url, self.triton_model_name)
             return
         
         # 1. Setup Device (Use your RTX 4070 Ti)
@@ -74,7 +77,7 @@ class EyeScannerModel(AIModel):
                                  std=[0.229, 0.224, 0.225])
         ])
         self.ready = True
-        print(f"Eye Scanner loaded on {self.device}")
+        logger.info("Eye Scanner loaded on %s", self.device)
  
     async def predict(self, input_data: bytes):
         try:

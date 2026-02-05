@@ -1,0 +1,94 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "opendeploy",
+    "title": "OpenDeploy API Metrics",
+    "schemaVersion": 39,
+    "version": 1,
+    "refresh": "5s",
+    "timezone": "browser",
+    "time": {
+      "from": "now-15m",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "type": "stat",
+        "title": "RPS (1m)",
+        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(rate(opendeploy_requests_total[1m]))",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "stat",
+        "title": "Error Rate (%)",
+        "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "100 * sum(rate(opendeploy_requests_total{status=~\"5..\"}[5m])) / sum(rate(opendeploy_requests_total[5m]))",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "stat",
+        "title": "Active Requests",
+        "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "opendeploy_active_requests",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "stat",
+        "title": "Compute p95 (ms)",
+        "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(opendeploy_compute_ms_bucket[5m])) by (le))",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "timeseries",
+        "title": "Request Latency (p50/p95)",
+        "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.5, sum(rate(opendeploy_request_latency_ms_bucket[5m])) by (le))",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(opendeploy_request_latency_ms_bucket[5m])) by (le))",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "type": "timeseries",
+        "title": "Requests by Status",
+        "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(opendeploy_requests_total[1m])) by (status)",
+            "refId": "A"
+          }
+        ]
+      }
+    ],
+    "annotations": {
+      "list": []
+    },
+    "templating": {
+      "list": []
+    }
+  },
+  "overwrite": true
+}

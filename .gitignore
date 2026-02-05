@@ -169,3 +169,5 @@ credentials.json
 local/
 scratch/
 playground/
+artifacts/
+edge_cache/

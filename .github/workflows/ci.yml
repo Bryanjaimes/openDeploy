@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  python-tests:
+    name: Python Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r backend/requirements-lite.txt
+          pip install pytest httpx ruff
+
+      - name: Lint
+        run: ruff check backend/ models/ scripts/
+
+      - name: Run tests
+        env:
+          OPENDEPLOY_API_KEY: test-key-123
+        run: python -m pytest backend/tests/ -v --tb=short
+
+  go-tests:
+    name: Go Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: cli/go.sum
+
+      - name: Build CLI
+        working-directory: cli
+        run: go build ./cmd/opendeploy
+
+      - name: Run tests
+        working-directory: cli
+        run: go test -v -race ./...
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build API image
+        run: docker build --build-arg BUILD_MODE=lite -t opendeploy:ci .
+
+      - name: Build operator image
+        run: docker build -t opendeploy-operator:ci -f operator/Dockerfile operator/
+
+  go-vet:
+    name: Go Vet & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: cli/go.sum
+
+      - name: Vet CLI
+        working-directory: cli
+        run: go vet ./...
+
+      - name: Vet WebRTC Gateway
+        working-directory: webrtc-gateway
+        run: go vet ./...

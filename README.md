@@ -125,6 +125,61 @@ The gateway writes frames to /dev/shm/opendeploy_frames. The API reads the lates
 Resume bullet:
 *Engineered a low-latency video ingestion pipeline using WebRTC and shared memory buffers, reducing end-to-end computer vision latency to <20ms.*
 
+## 🧊 V5 — The "Edge Transpiler" (Model Compiler)
+
+Goal: run the same model on edge devices (Raspberry Pi, offline laptops) by compiling and shipping optimized artifacts.
+
+What this does:
+- **Edge Build**: compiles a model into GGUF (llama.cpp) or ONNX using a quantization preset (e.g., 4-bit).
+- **Artifact Registry**: stores versioned artifacts in a lightweight registry directory (or OCI via oras later).
+- **Edge Agent (OTA)**: polls the registry and pulls the newest artifact to the device.
+- **Runtime Selector**: picks the right runtime based on the artifact format.
+
+Build (local):
+```bash
+opendeploy build --target edge --model TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
+  --format gguf --quant q4_0 --output artifacts/edge --registry artifacts/registry
+```
+
+Edge agent (OTA):
+```bash
+python scripts/edge/agent.py --model TinyLlama/TinyLlama-1.1B-Chat-v1.0 --registry artifacts/registry
+```
+
+Runtime selection (edge):
+```bash
+python scripts/edge/runtime.py --artifact artifacts/edge/TinyLlama_TinyLlama-1.1B-Chat-v1.0/<version>
+```
+
+Notes:
+- Set `LLAMA_CPP_PATH` or `AUTOGPTQ_BIN` to enable real conversions. Without them, the pipeline generates a placeholder artifact and a manifest for integration testing.
+- The registry is currently a local directory; OCI push can be added via `oras`.
+
+Resume bullet:
+*Built an automated model quantization pipeline that compiles PyTorch checkpoints into hardware-optimized artifacts (GGUF/ONNX) for edge deployment.*
+
+## 🔥 vLLM Runner (OpenAI-Compatible)
+
+Run the vLLM server locally (GPU recommended):
+
+```bash
+docker compose -f docker-compose.vllm.yml up -d vllm
+```
+
+The server will listen on http://localhost:8001 and expose OpenAI-compatible endpoints, for example:
+
+```bash
+curl http://localhost:8001/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"TinyLlama/TinyLlama-1.1B-Chat-v1.0","messages":[{"role":"user","content":"Hello!"}]}'
+```
+
+CLI shortcut:
+
+```bash
+opendeploy run TinyLlama/TinyLlama-1.1B-Chat-v1.0 --runner vllm
+```
+
 ## ⚙️ Optional: Triton Serving (Vision)
 
 If you want the eye scanner to run via NVIDIA Triton, export the ONNX model and start Triton:
@@ -254,7 +309,15 @@ OpenDeploy includes built-in observability:
 - **Tracing**: OpenTelemetry distributed tracing
 - **Alerts**: SLO-based alerting
 
-Access Grafana at `http://localhost:3000` (default credentials in `docker-compose.yml`)
+Access Grafana at `http://localhost:3002` (default credentials in `docker-compose.yml`)
+
+Local Prometheus + Grafana (V5 baseline):
+```bash
+docker compose up -d prometheus grafana
+```
+
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3002 (admin/admin)
 
 ## 🤝 Contributing
 

@@ -1,8 +1,11 @@
+import logging
 import os
 import time
 from typing import Dict, Type
 from backend.interface import AIModel
 from backend.metrics import metrics_store
+
+logger = logging.getLogger(__name__)
 
 class ModelRegistry:
     def __init__(self):
@@ -10,7 +13,7 @@ class ModelRegistry:
 
     def register(self, model_instance: AIModel):
         """Register a new model instance"""
-        print(f"Registering model: {model_instance.name}")
+        logger.info("Registering model: %s", model_instance.name)
         self._models[model_instance.name] = model_instance
 
         lazy_load = os.getenv("OPENDEPLOY_LAZY_LOAD", "false").lower() in {"1", "true", "yes"}
@@ -26,9 +29,11 @@ class ModelRegistry:
     def list_models(self) -> list:
         return [
             {
-                "name": m.name, 
-                "input_type": m.input_type
-            } 
+                "name": m.name,
+                "input_type": m.input_type,
+                "version": getattr(m, "version", "0.0.0"),
+                "ready": getattr(m, "ready", False),
+            }
             for m in self._models.values()
         ]
 

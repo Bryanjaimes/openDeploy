@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package opendeploy.v1;
+
+option go_package = "opendeploy/proto/v1;v1";
+
+// InferenceRequest is the canonical request sent from the CLI or gateway
+// to a model runner.
+message InferenceRequest {
+  // Name of the model to run inference on (e.g. "tiny-llama-chat").
+  string model = 1;
+
+  // Text prompt for text-generation models.
+  string prompt = 2;
+
+  // Raw image bytes for vision models (mutually exclusive with prompt).
+  bytes image = 3;
+
+  // Maximum number of tokens to generate.
+  int32 max_tokens = 4;
+
+  // Sampling temperature.
+  float temperature = 5;
+
+  // Top-p nucleus sampling.
+  float top_p = 6;
+
+  // Optional request ID for tracing.
+  string request_id = 7;
+}
+
+// InferenceResponse is the canonical response from a model runner.
+message InferenceResponse {
+  // The generated text (for text models).
+  string text = 1;
+
+  // Structured result payload (JSON-encoded for flexibility).
+  string result_json = 2;
+
+  // The model that produced this response.
+  string model = 3;
+
+  // Number of tokens generated.
+  int32 tokens_generated = 4;
+
+  // Compute time in milliseconds.
+  float compute_ms = 5;
+
+  // Optional request ID echo.
+  string request_id = 6;
+}
+
+// HealthResponse from a runner.
+message HealthResponse {
+  bool healthy = 1;
+  string model = 2;
+  string version = 3;
+}
+
+// ModelInfo describes a loaded model.
+message ModelInfo {
+  string name = 1;
+  string input_type = 2;
+  string version = 3;
+  bool ready = 4;
+  HardwareRequirements hardware = 5;
+}
+
+message HardwareRequirements {
+  int32 min_ram_gb = 1;
+  int32 min_vram_gb = 2;
+}
+
+message ListModelsRequest {}
+
+message ListModelsResponse {
+  repeated ModelInfo models = 1;
+}
+
+// OpenDeployService defines the gRPC contract between CLI and runners.
+service OpenDeployService {
+  // Health check.
+  rpc Health(HealthRequest) returns (HealthResponse);
+
+  // List available models.
+  rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
+
+  // Run inference on a model.
+  rpc Infer(InferenceRequest) returns (InferenceResponse);
+
+  // Streaming inference for token-by-token generation.
+  rpc InferStream(InferenceRequest) returns (stream InferenceResponse);
+}
+
+message HealthRequest {}

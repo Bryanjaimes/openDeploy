@@ -1,6 +1,11 @@
+import asyncio
+import logging
+
 from backend.interface import AIModel
 from transformers import pipeline
-import asyncio
+
+logger = logging.getLogger(__name__)
+
 
 class HFSentimentModel(AIModel):
     @property
@@ -12,20 +17,21 @@ class HFSentimentModel(AIModel):
         return "text"
 
     def load(self):
-        print("⬇️ Downloading/Loading Hugging Face Model (distilbert)...")
-        # This pipeline downloads the model automatically on first use
+        logger.info("⬇️ Downloading/Loading Hugging Face Model (distilbert)...")
         self.pipe = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
         self.ready = True
-        print("✅ Hugging Face Model Loaded")
+        logger.info("✅ Hugging Face Model Loaded")
 
     async def predict(self, input_data):
-        # Run inference (blocking call, so we wrap it if needed, but for this demo it's fine)
-        # In production, you'd run this in a thread pool
-        result = self.pipe(input_data)[0]
-        
-        # Map standard sentiment to medical context
+        loop = asyncio.get_running_loop()
+
+        def _run_inference():
+            return self.pipe(input_data)[0]
+
+        result = await loop.run_in_executor(None, _run_inference)
+
         interpretation = "Positive Outlook" if result['label'] == 'POSITIVE' else "Negative/Distressed"
-        
+
         return {
             "sentiment": interpretation,
             "raw_label": result['label'],
