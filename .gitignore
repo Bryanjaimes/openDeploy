@@ -171,3 +171,6 @@ scratch/
 playground/
 artifacts/
 edge_cache/
+
+.venv/
+node_modules/

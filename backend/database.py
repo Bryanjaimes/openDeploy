@@ -23,6 +23,18 @@ class Prediction(Base):
     result = Column(JSON)
 
 
+class GlossaryCache(Base):
+    """Cached AI-generated glossary descriptions.  One row per term."""
+    __tablename__ = "glossary_cache"
+
+    term = Column(String, primary_key=True, index=True)
+    display_name = Column(String, nullable=False)
+    short = Column(String, nullable=False)
+    detail = Column(String, nullable=True)
+    category = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
 

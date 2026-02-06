@@ -17,7 +17,7 @@ load_dotenv()
 
 from backend.registry import registry
 from backend.loader import load_plugins
-from backend.database import init_db, get_db, Prediction
+from backend.database import init_db, get_db, Prediction, GlossaryCache
 from backend.metrics import metrics_store
 from backend.metrics_prom import REQUESTS_TOTAL, REQUEST_LATENCY_MS, ACTIVE_REQUESTS, COMPUTE_MS, MODEL_LOAD_MS
 from backend.shm_frames import SharedMemoryFrameReader
@@ -84,7 +84,7 @@ allowed_origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -136,7 +136,10 @@ async def metrics_middleware(request: Request, call_next):
         status_code = getattr(response, "status_code", 500)
         REQUESTS_TOTAL.labels(request.url.path, request.method, str(status_code)).inc()
         if is_predict:
-            metrics_store.record_request(duration_ms, status_code)
+            # Extract model name from /models/{model_name}/predict
+            parts = request.url.path.strip("/").split("/")
+            model_name = parts[1] if len(parts) >= 3 else ""
+            metrics_store.record_request(duration_ms, status_code, model_name=model_name)
             metrics_store.dec_active()
             ACTIVE_REQUESTS.dec()
 
@@ -338,4 +341,132 @@ async def generate(request: GenerateRequest, db: Session = Depends(get_db)):
     return {"model": model_name, "response": result}
 
 
+# ── Glossary AI description endpoint ────────────────────────────────
+
+class GlossaryDescribeRequest(BaseModel):
+    term: str
+    context: Optional[str] = None  # e.g. "shown on the Metrics page"
+
+
+def _generate_glossary_via_openai(term: str, context: Optional[str] = None) -> dict:
+    """Call OpenAI (or compatible endpoint) to generate a glossary entry."""
+    import json as _json
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+    if not api_key:
+        raise HTTPException(
+            status_code=501,
+            detail="OPENAI_API_KEY not configured on server",
+        )
+
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=api_key, base_url=base_url)
+
+        system_prompt = (
+            "You are a concise technical glossary writer for OpenDeploy, "
+            "an open-source GPU-optimized AI deployment platform.\n"
+            "Respond ONLY with valid JSON — no markdown fences.\n"
+            '{"term": "<Display Name>", '
+            '"short": "<1-sentence plain-English explanation>", '
+            '"detail": "<2-3 sentence deeper explanation>", '
+            '"category": "<Metric|Infra|ML|Cost|Platform>"}'
+        )
+
+        user_msg = f'Define "{term}"'
+        if context:
+            user_msg += f" (context: {context})"
+
+        completion = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.3,
+            max_tokens=300,
+        )
+
+        raw = completion.choices[0].message.content or "{}"
+        # Strip markdown fences if the model wraps them anyway
+        raw = raw.strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+
+        return _json.loads(raw)
+
+    except ImportError:
+        raise HTTPException(
+            status_code=501,
+            detail="openai package not installed. Run: pip install openai",
+        )
+    except Exception as exc:
+        logger.error(f"OpenAI glossary generation failed for '{term}': {exc}")
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@app.post("/glossary/describe")
+def describe_glossary_term(
+    req: GlossaryDescribeRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Return an AI-generated description for a technical term.
+    Results are cached in SQLite — OpenAI is only called once per term.
+    """
+    normalized = req.term.strip().lower()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="term is required")
+
+    # 1. Check cache
+    cached = db.query(GlossaryCache).filter(GlossaryCache.term == normalized).first()
+    if cached:
+        return {
+            "term": cached.display_name,
+            "short": cached.short,
+            "detail": cached.detail,
+            "category": cached.category,
+            "source": "cache",
+        }
+
+    # 2. Generate via OpenAI
+    entry = _generate_glossary_via_openai(req.term, req.context)
+
+    # 3. Persist to cache
+    row = GlossaryCache(
+        term=normalized,
+        display_name=entry.get("term", req.term),
+        short=entry.get("short", ""),
+        detail=entry.get("detail"),
+        category=entry.get("category"),
+    )
+    db.merge(row)
+    db.commit()
+
+    return {
+        "term": row.display_name,
+        "short": row.short,
+        "detail": row.detail,
+        "category": row.category,
+        "source": "generated",
+    }
+
+
+@app.get("/glossary/cache")
+def list_glossary_cache(db: Session = Depends(get_db)):
+    """Return all cached glossary entries."""
+    rows = db.query(GlossaryCache).order_by(GlossaryCache.term).all()
+    return [
+        {
+            "term": r.display_name,
+            "short": r.short,
+            "detail": r.detail,
+            "category": r.category,
+        }
+        for r in rows
+    ]
 
