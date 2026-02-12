@@ -12,3 +12,6 @@ tritonclient[http]>=2.50.0
 bitsandbytes>=0.44.0
 sentencepiece>=0.2.0
 prometheus-client>=0.21.0
+opencv-python-headless>=4.9.0
+onnxruntime>=1.17.0
+ultralytics>=8.1.0

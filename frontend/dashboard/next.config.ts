@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
       { source: "/api/:path*", destination: `${apiUrl}/:path*` },
     ];
   },
+  // Allow self-signed certs for the local backend proxy
+  serverExternalPackages: [],
 };
 
 export default nextConfig;

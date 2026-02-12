@@ -35,21 +35,23 @@ const (
 func main() {
 	addr := envOrDefault("WEBRTC_HTTP_ADDR", defaultHTTPAddr)
 	shmPath := envOrDefault("OPENDEPLOY_SHM_PATH", "/dev/shm/opendeploy_frames")
-	shmSize := envOrDefaultInt("OPENDEPLOY_SHM_SIZE", 16*1024*1024)
 	defaultWidth := envOrDefaultInt("FRAME_WIDTH", 0)
 	defaultHeight := envOrDefaultInt("FRAME_HEIGHT", 0)
 	defaultFormat := envOrDefaultInt("FRAME_FORMAT", formatRGB)
 	maxWidth := envOrDefaultInt("OPENDEPLOY_MAX_FRAME_WIDTH", 1920)
 	maxHeight := envOrDefaultInt("OPENDEPLOY_MAX_FRAME_HEIGHT", 1080)
 	maxBytes := envOrDefaultInt("OPENDEPLOY_MAX_FRAME_BYTES", 4*1920*1080)
+	ringSlots := envOrDefaultInt("OPENDEPLOY_RING_SLOTS", 64)
 	apiKey := strings.TrimSpace(os.Getenv("OPENDEPLOY_API_KEY"))
 	allowedOrigins := parseAllowedOrigins(os.Getenv("OPENDEPLOY_ALLOWED_ORIGINS"))
 
-	writer, err := NewShmWriter(shmPath, shmSize)
+	writer, err := NewShmWriter(shmPath, ringSlots, maxBytes)
 	if err != nil {
 		log.Fatalf("failed to init shm writer: %v", err)
 	}
 	defer writer.Close()
+	log.Printf("SHM ring buffer: %d slots, %d bytes/slot, %d MB total",
+		ringSlots, maxBytes, writer.totalSize/(1024*1024))
 
 	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -256,40 +258,95 @@ func channelsForFormat(format int) int {
 	}
 }
 
+// ---------- ODSH v2 Ring Buffer Protocol ----------
+//
+// Global Header (64 bytes):
+//   [0:4]   magic    = "ODSH"
+//   [4:8]   version  = 2
+//   [8:12]  num_slots
+//   [12:16] slot_size           (slotHeaderSize + slot_data_capacity)
+//   [16:24] write_seq (uint64)  monotonically increasing; slot = (write_seq-1) % num_slots
+//   [24:28] slot_data_capacity  max payload bytes per slot
+//   [28:64] reserved
+//
+// Per-Slot Header (40 bytes, repeats num_slots times starting at offset 64):
+//   [0:4]   magic    = "ODSF"
+//   [4:8]   width
+//   [8:12]  height
+//   [12:16] format   (1=RGB, 2=RGBA, 3=GRAY)
+//   [16:20] data_len
+//   [20:24] flags    (0=empty, 1=ready, 2=writing)
+//   [24:32] seq      (uint64, matches global write_seq at write time)
+//   [32:40] timestamp_ns (uint64)
+//
+// Slot Payload (slot_data_capacity bytes):
+//   [40 .. 40+data_len)  raw pixel data
+
+const (
+	globalHeaderSize = 64
+	slotHeaderSize   = 40
+	slotFlagEmpty    = 0
+	slotFlagReady    = 1
+	slotFlagWriting  = 2
+)
+
 type ShmWriter struct {
-	path   string
-	size   int
-	mmap   []byte
-	seq    uint64
-	closed atomic.Bool
+	path         string
+	totalSize    int
+	numSlots     int
+	slotSize     int
+	slotCapacity int
+	mmap         []byte
+	seq          uint64
+	closed       atomic.Bool
 }
 
-func NewShmWriter(path string, size int) (*ShmWriter, error) {
+func NewShmWriter(path string, numSlots, slotCapacity int) (*ShmWriter, error) {
+	slotSize := slotHeaderSize + slotCapacity
+	totalSize := globalHeaderSize + numSlots*slotSize
+
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, err
 	}
-	if err := file.Truncate(int64(size)); err != nil {
+	if err := file.Truncate(int64(totalSize)); err != nil {
 		_ = file.Close()
 		return nil, err
 	}
 
-	mmapData, err := mmapFile(file, size)
+	mmapData, err := mmapFile(file, totalSize)
 	if err != nil {
 		_ = file.Close()
 		return nil, err
 	}
-
 	_ = file.Close()
 
-	writer := &ShmWriter{
-		path: path,
-		size: size,
-		mmap: mmapData,
+	w := &ShmWriter{
+		path:         path,
+		totalSize:    totalSize,
+		numSlots:     numSlots,
+		slotSize:     slotSize,
+		slotCapacity: slotCapacity,
+		mmap:         mmapData,
 	}
+	w.initGlobalHeader()
+	return w, nil
+}
 
-	writer.resetHeader()
-	return writer, nil
+func (s *ShmWriter) initGlobalHeader() {
+	for i := 0; i < globalHeaderSize; i++ {
+		s.mmap[i] = 0
+	}
+	copy(s.mmap[0:4], []byte("ODSH"))
+	binary.LittleEndian.PutUint32(s.mmap[4:8], 2) // version 2
+	binary.LittleEndian.PutUint32(s.mmap[8:12], uint32(s.numSlots))
+	binary.LittleEndian.PutUint32(s.mmap[12:16], uint32(s.slotSize))
+	binary.LittleEndian.PutUint64(s.mmap[16:24], 0) // write_seq starts at 0
+	binary.LittleEndian.PutUint32(s.mmap[24:28], uint32(s.slotCapacity))
+}
+
+func (s *ShmWriter) slotOffset(index int) int {
+	return globalHeaderSize + index*s.slotSize
 }
 
 func (s *ShmWriter) WriteFrame(width, height, format uint32, payload []byte) error {
@@ -298,39 +355,35 @@ func (s *ShmWriter) WriteFrame(width, height, format uint32, payload []byte) err
 	}
 
 	payloadLen := len(payload)
-	headerSize := shmHeaderSize()
-	if headerSize+payloadLen > len(s.mmap) {
+	if payloadLen > s.slotCapacity {
 		return nil
 	}
 
-	seq := atomic.AddUint64(&s.seq, 1)
-	ts := uint64(time.Now().UnixNano())
+	s.seq++
+	slotIndex := int((s.seq - 1) % uint64(s.numSlots))
+	off := s.slotOffset(slotIndex)
+	h := s.mmap[off:]
 
-	copy(s.mmap[0:4], []byte("ODSH"))
-	binary.LittleEndian.PutUint32(s.mmap[4:8], 1)
-	binary.LittleEndian.PutUint32(s.mmap[8:12], width)
-	binary.LittleEndian.PutUint32(s.mmap[12:16], height)
-	binary.LittleEndian.PutUint32(s.mmap[16:20], format)
-	binary.LittleEndian.PutUint32(s.mmap[20:24], uint32(payloadLen))
-	binary.LittleEndian.PutUint64(s.mmap[24:32], seq)
-	binary.LittleEndian.PutUint64(s.mmap[32:40], ts)
-	copy(s.mmap[headerSize:headerSize+payloadLen], payload)
+	// Write slot header (flags = WRITING)
+	copy(h[0:4], []byte("ODSF"))
+	binary.LittleEndian.PutUint32(h[4:8], width)
+	binary.LittleEndian.PutUint32(h[8:12], height)
+	binary.LittleEndian.PutUint32(h[12:16], format)
+	binary.LittleEndian.PutUint32(h[16:20], uint32(payloadLen))
+	binary.LittleEndian.PutUint32(h[20:24], slotFlagWriting)
+	binary.LittleEndian.PutUint64(h[24:32], s.seq)
+	binary.LittleEndian.PutUint64(h[32:40], uint64(time.Now().UnixNano()))
+
+	// Write payload
+	copy(s.mmap[off+slotHeaderSize:off+slotHeaderSize+payloadLen], payload)
+
+	// Mark slot as ready
+	binary.LittleEndian.PutUint32(h[20:24], slotFlagReady)
+
+	// Update global write_seq so readers see the latest slot
+	binary.LittleEndian.PutUint64(s.mmap[16:24], s.seq)
 
 	return nil
-}
-
-func (s *ShmWriter) resetHeader() {
-	if len(s.mmap) < shmHeaderSize() {
-		return
-	}
-	copy(s.mmap[0:4], []byte("ODSH"))
-	binary.LittleEndian.PutUint32(s.mmap[4:8], 1)
-	binary.LittleEndian.PutUint32(s.mmap[8:12], 0)
-	binary.LittleEndian.PutUint32(s.mmap[12:16], 0)
-	binary.LittleEndian.PutUint32(s.mmap[16:20], 0)
-	binary.LittleEndian.PutUint32(s.mmap[20:24], 0)
-	binary.LittleEndian.PutUint64(s.mmap[24:32], 0)
-	binary.LittleEndian.PutUint64(s.mmap[32:40], 0)
 }
 
 func (s *ShmWriter) Close() {
@@ -338,8 +391,4 @@ func (s *ShmWriter) Close() {
 		return
 	}
 	_ = munmapFile(s.mmap)
-}
-
-func shmHeaderSize() int {
-	return 40
 }

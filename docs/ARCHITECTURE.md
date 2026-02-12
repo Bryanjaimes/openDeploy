@@ -102,15 +102,36 @@ Supports:
 
 ```
 Camera/Device → WebRTC DataChannel → Go Gateway
-    → mmap write (ODSH header + raw pixels)
-    → Python FastAPI reads /dev/shm
-    → ResNet18/TensorRT inference
+    → mmap write to ring buffer slot (ODSH v2)
+    → Python FastAPI reads /dev/shm (latest or temporal window)
+    → Model inference (single-frame or multi-frame action recognition)
     → JSON result
 ```
 
-**IPC Protocol (ODSH):**
-- 40-byte header: magic(4) + version(4) + width(4) + height(4) + format(4) + data_len(4) + seq(8) + timestamp_ns(8)
-- Double-read consistency check prevents torn reads
+**IPC Protocol — ODSH v2 Ring Buffer:**
+
+```
+┌─────────────────────────── /dev/shm/opendeploy_frames ───────────────────────────┐
+│ Global Header (64 B)  │ Slot 0 │ Slot 1 │ Slot 2 │ ... │ Slot N-1              │
+└───────────────────────┴────────┴────────┴────────┴─────┴────────────────────────┘
+```
+
+Global Header (64 bytes):
+- `magic(4)="ODSH"` · `version(4)=2` · `num_slots(4)` · `slot_size(4)` · `write_seq(8)` · `slot_capacity(4)` · `reserved(36)`
+
+Per-Slot (40-byte header + payload):
+- `magic(4)="ODSF"` · `width(4)` · `height(4)` · `format(4)` · `data_len(4)` · `flags(4)` · `seq(8)` · `timestamp_ns(8)`
+- Flags: `0=empty`, `1=ready`, `2=writing`
+- Payload follows immediately after the 40-byte slot header
+
+**Ring Buffer Semantics:**
+- Default: 64 slots (configurable via `OPENDEPLOY_RING_SLOTS`)
+- Slot capacity from `OPENDEPLOY_MAX_FRAME_BYTES` (default 4×1920×1080)
+- `write_seq` increments monotonically; slot index = `(write_seq - 1) % num_slots`
+- Writer marks slot `WRITING → copies payload → marks READY → updates global write_seq`
+- Reader uses double-read consistency check (re-reads seq + flags after payload copy)
+- `read_latest()` returns the most recent frame (backward compatible)
+- `read_window(n)` returns the last *n* frames oldest→newest for temporal analysis
 
 **Latency Budget:**
 | Stage | Target |

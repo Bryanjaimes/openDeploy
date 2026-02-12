@@ -13,7 +13,7 @@
         padding: 24px;
       }
       .panel {
-        max-width: 920px;
+        max-width: 1200px;
         margin: 0 auto;
         background: #111827;
         border: 1px solid #1f2937;
@@ -30,13 +30,18 @@
         grid-template-columns: 1fr 1fr;
         gap: 16px;
       }
+      .row-3 {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 16px;
+      }
       label {
         display: block;
         font-size: 12px;
         color: #9ca3af;
         margin-bottom: 6px;
       }
-      input, button {
+      input, button, select {
         width: 100%;
         border-radius: 8px;
         border: 1px solid #1f2937;
@@ -44,6 +49,7 @@
         font-size: 14px;
         background: #0b1220;
         color: #e6edf3;
+        box-sizing: border-box;
       }
       button {
         cursor: pointer;
@@ -61,10 +67,49 @@
         border: 1px solid #1f2937;
         background: #0b1220;
       }
+      .video-container {
+        position: relative;
+        width: 100%;
+      }
+      .video-container video {
+        display: block;
+        width: 100%;
+      }
+      .video-container .overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        border-radius: 10px;
+      }
       .status {
         margin-top: 12px;
         font-size: 13px;
         color: #9ca3af;
+      }
+      .detection-stats {
+        display: flex;
+        gap: 16px;
+        margin-top: 12px;
+        font-size: 13px;
+        flex-wrap: wrap;
+      }
+      .stat {
+        background: #0b1220;
+        border: 1px solid #1f2937;
+        border-radius: 8px;
+        padding: 8px 14px;
+      }
+      .stat .val {
+        font-size: 20px;
+        font-weight: 700;
+        color: #3b82f6;
+      }
+      .stat .lbl {
+        color: #9ca3af;
+        font-size: 11px;
       }
       .metrics {
         white-space: pre-wrap;
@@ -73,29 +118,50 @@
         padding: 12px;
         border-radius: 10px;
         margin-top: 12px;
+        max-height: 200px;
+        overflow-y: auto;
+        font-size: 12px;
       }
+      .hidden { display: none; }
     </style>
   </head>
   <body>
     <div class="panel">
-      <h1>OpenDeploy WebRTC Client</h1>
-      <p>Streams camera frames over a WebRTC DataChannel to the gateway and requests inference from the API.</p>
+      <h1>OpenDeploy Vision — Live Detection</h1>
+      <p>Live camera feed → YOLOv8-seg detection + instance segmentation. Direct mode (no WebRTC gateway required).</p>
 
       <div class="row">
+        <div>
+          <label for="api">API URL</label>
+          <input id="api" value="" />
+        </div>
+        <div>
+          <label for="mode">Mode</label>
+          <select id="mode">
+            <option value="direct" selected>Direct (Local — no gateway needed)</option>
+            <option value="webrtc">WebRTC (requires gateway + SHM)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row" id="gatewayRow" style="margin-top: 12px; display: none;">
         <div>
           <label for="gateway">WebRTC Gateway URL</label>
           <input id="gateway" value="" />
         </div>
         <div>
-          <label for="api">API URL</label>
-          <input id="api" value="" />
+          <label for="apiKey">API Key</label>
+          <input id="apiKey" placeholder="Enter API key" />
         </div>
       </div>
 
-      <div class="row" style="margin-top: 12px;">
+      <div class="row-3" style="margin-top: 12px;">
         <div>
-          <label for="apiKey">API Key</label>
-          <input id="apiKey" placeholder="Enter API key" />
+          <label for="model">Model</label>
+          <select id="model">
+            <option value="yolov8-seg" selected>YOLOv8-seg (Detection + Segmentation)</option>
+            <option value="diabetic-retinopathy-glaucoma-detector">Eye Scanner (ResNet-18)</option>
+          </select>
         </div>
         <div>
           <label for="interval">Frame Interval (ms)</label>
@@ -114,13 +180,23 @@
 
       <div class="row" style="margin-top: 16px;">
         <div>
-          <label>Camera Preview</label>
-          <video id="preview" autoplay playsinline muted></video>
+          <label>Live Detection View</label>
+          <div class="video-container">
+            <video id="preview" autoplay playsinline muted></video>
+            <canvas id="overlay" class="overlay"></canvas>
+          </div>
         </div>
         <div>
-          <label>Capture Buffer</label>
+          <label>Capture Buffer (sent to inference)</label>
           <canvas id="buffer" width="640" height="480"></canvas>
         </div>
+      </div>
+
+      <div class="detection-stats" id="detectionStats">
+        <div class="stat"><div class="val" id="statCount">0</div><div class="lbl">Detections</div></div>
+        <div class="stat"><div class="val" id="statInfer">--</div><div class="lbl">Inference (ms)</div></div>
+        <div class="stat"><div class="val" id="statFPS">--</div><div class="lbl">FPS</div></div>
+        <div class="stat"><div class="val" id="statModel">--</div><div class="lbl">Model</div></div>
       </div>
 
       <div class="status" id="status">Idle.</div>
@@ -135,19 +211,50 @@
       const preview = document.getElementById("preview");
       const canvas = document.getElementById("buffer");
       const ctx = canvas.getContext("2d");
+      const overlayCanvas = document.getElementById("overlay");
+      const overlayCtx = overlayCanvas.getContext("2d");
       const gatewayInput = document.getElementById("gateway");
       const apiInput = document.getElementById("api");
+      const modeSelect = document.getElementById("mode");
 
       let peerConnection;
       let dataChannel;
       let stream;
       let timer;
+      let frameCount = 0;
+      let fpsStart = performance.now();
+
+      // Show/hide gateway row based on mode
+      modeSelect.addEventListener("change", () => {
+        document.getElementById("gatewayRow").style.display =
+          modeSelect.value === "webrtc" ? "grid" : "none";
+      });
+
+      // Per-class colors (deterministic, high contrast)
+      const CLASS_COLORS = [
+        "#FF3838", "#FF9D97", "#FF701F", "#FFB21D", "#CFD231",
+        "#48F90A", "#92CC17", "#3DDB86", "#1A9334", "#00D4BB",
+        "#2C99A8", "#00C2FF", "#344593", "#6473FF", "#0018EC",
+        "#8438FF", "#520085", "#CB38FF", "#FF95C8", "#FF37C7",
+      ];
+
+      function getColor(classId) {
+        return CLASS_COLORS[classId % CLASS_COLORS.length];
+      }
+
+      function hexToRGBA(hex, alpha) {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r},${g},${b},${alpha})`;
+      }
 
       if (!gatewayInput.value) {
         gatewayInput.value = `${window.location.origin}/webrtc`;
       }
+      // Auto-detect API URL from current page origin
       if (!apiInput.value) {
-        apiInput.value = `${window.location.origin}/api`;
+        apiInput.value = window.location.origin;
       }
 
       function setStatus(text) {
@@ -158,9 +265,160 @@
         metricsEl.textContent = data ? JSON.stringify(data, null, 2) : "";
       }
 
-      async function createOffer() {
-        const gatewayUrl = document.getElementById("gateway").value.replace(/\/$/, "");
-        const apiUrl = document.getElementById("api").value.replace(/\/$/, "");
+      // Sync overlay canvas size to video element
+      function syncOverlaySize() {
+        const rect = preview.getBoundingClientRect();
+        overlayCanvas.width = rect.width;
+        overlayCanvas.height = rect.height;
+      }
+
+      preview.addEventListener("loadedmetadata", syncOverlaySize);
+      window.addEventListener("resize", syncOverlaySize);
+
+      // ── Drawing functions ─────────────────────────────────────────
+
+      function drawDetections(detections, imgWidth, imgHeight) {
+        syncOverlaySize();
+        const cw = overlayCanvas.width;
+        const ch = overlayCanvas.height;
+        const sx = cw / imgWidth;
+        const sy = ch / imgHeight;
+
+        overlayCtx.clearRect(0, 0, cw, ch);
+
+        for (const det of detections) {
+          const color = getColor(det.class_id);
+          const { x1, y1, x2, y2 } = det.bbox;
+          const bx = x1 * sx, by = y1 * sy;
+          const bw = (x2 - x1) * sx, bh = (y2 - y1) * sy;
+
+          // Draw segmentation mask polygon (semi-transparent fill)
+          if (det.mask_polygon && det.mask_polygon.length > 2) {
+            overlayCtx.beginPath();
+            overlayCtx.moveTo(det.mask_polygon[0][0] * sx, det.mask_polygon[0][1] * sy);
+            for (let i = 1; i < det.mask_polygon.length; i++) {
+              overlayCtx.lineTo(det.mask_polygon[i][0] * sx, det.mask_polygon[i][1] * sy);
+            }
+            overlayCtx.closePath();
+            overlayCtx.fillStyle = hexToRGBA(color, 0.25);
+            overlayCtx.fill();
+            overlayCtx.strokeStyle = hexToRGBA(color, 0.6);
+            overlayCtx.lineWidth = 1;
+            overlayCtx.stroke();
+          }
+
+          // Draw bounding box
+          overlayCtx.strokeStyle = color;
+          overlayCtx.lineWidth = 2;
+          overlayCtx.strokeRect(bx, by, bw, bh);
+
+          // Draw label background
+          const label = `${det.class_name} ${(det.confidence * 100).toFixed(1)}%`;
+          overlayCtx.font = "bold 13px system-ui, sans-serif";
+          const textMetrics = overlayCtx.measureText(label);
+          const labelH = 20;
+          const labelW = textMetrics.width + 10;
+
+          overlayCtx.fillStyle = color;
+          overlayCtx.fillRect(bx, by - labelH, labelW, labelH);
+
+          // Draw label text
+          overlayCtx.fillStyle = "#ffffff";
+          overlayCtx.fillText(label, bx + 5, by - 5);
+        }
+      }
+
+      function updateStats(data) {
+        const count = data.detection_count ?? data.detections?.length ?? 0;
+        const inferMs = data.inference_ms ?? data.metrics?.compute_ms ?? "--";
+        const model = data.model ?? "--";
+
+        frameCount++;
+        const elapsed = (performance.now() - fpsStart) / 1000;
+        const fps = elapsed > 0 ? (frameCount / elapsed).toFixed(1) : "--";
+
+        document.getElementById("statCount").textContent = count;
+        document.getElementById("statInfer").textContent =
+          typeof inferMs === "number" ? inferMs.toFixed(1) : inferMs;
+        document.getElementById("statFPS").textContent = fps;
+        document.getElementById("statModel").textContent = model;
+      }
+
+      // ── Direct Mode (no WebRTC / no SHM — works on Windows) ──────
+
+      async function startDirect() {
+        const apiUrl = apiInput.value.replace(/\/$/, "");
+
+        const localStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 640, height: 480 },
+          audio: false,
+        });
+        stream = localStream;
+        preview.srcObject = localStream;
+
+        // Wait for video to be ready
+        await new Promise((resolve) => {
+          preview.onloadedmetadata = () => { preview.play(); resolve(); };
+        });
+
+        setStatus("Live detection active (direct mode)");
+        frameCount = 0;
+        fpsStart = performance.now();
+        const intervalMs = Number(document.getElementById("interval").value || 150);
+        timer = setInterval(() => sendFrameDirect(apiUrl), intervalMs);
+      }
+
+      let inferInFlight = false;
+
+      async function sendFrameDirect(apiUrl) {
+        if (inferInFlight) return;
+        inferInFlight = true;
+
+        try {
+          // Capture frame to canvas
+          ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
+
+          // Convert to JPEG base64
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+          const base64 = dataUrl.split(",")[1];
+
+          const selectedModel = document.getElementById("model").value;
+
+          const response = await fetch(`${apiUrl}/vision/detect`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model: selectedModel, image: base64 }),
+          });
+
+          if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`API ${response.status}: ${errText}`);
+          }
+
+          const data = await response.json();
+
+          // Draw overlay
+          if (data.detections && data.image_size) {
+            const [w, h] = data.image_size.split("x").map(Number);
+            drawDetections(data.detections, w, h);
+          } else {
+            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+          }
+
+          updateStats(data);
+          setMetrics(data);
+        } catch (err) {
+          setStatus(`Error: ${err.message}`);
+        } finally {
+          inferInFlight = false;
+        }
+      }
+
+      // ── WebRTC Mode (Linux with SHM gateway) ─────────────────────
+
+      async function startWebRTC() {
+        const gatewayUrl = gatewayInput.value.replace(/\/$/, "");
+        const apiUrl = apiInput.value.replace(/\/$/, "");
         const apiKey = document.getElementById("apiKey").value;
 
         peerConnection = new RTCPeerConnection();
@@ -195,19 +453,15 @@
         await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
 
         dataChannel.onopen = () => {
-          setStatus("Streaming frames...");
+          setStatus("Streaming frames — live detection active (WebRTC)");
+          frameCount = 0;
+          fpsStart = performance.now();
           const intervalMs = Number(document.getElementById("interval").value || 100);
-          timer = setInterval(() => sendFrame(apiUrl, apiKey), intervalMs);
+          timer = setInterval(() => sendFrameWebRTC(apiUrl, apiKey), intervalMs);
         };
 
-        dataChannel.onclose = () => {
-          setStatus("DataChannel closed");
-        };
-
-        dataChannel.onerror = (err) => {
-          console.error(err);
-          setStatus("DataChannel error");
-        };
+        dataChannel.onclose = () => setStatus("DataChannel closed");
+        dataChannel.onerror = (err) => { console.error(err); setStatus("DataChannel error"); };
       }
 
       function encodeFrame(imageData) {
@@ -239,14 +493,18 @@
         return payload;
       }
 
-      async function sendFrame(apiUrl, apiKey) {
-        if (!dataChannel || dataChannel.readyState !== "open") {
-          return;
-        }
+      async function sendFrameWebRTC(apiUrl, apiKey) {
+        if (!dataChannel || dataChannel.readyState !== "open") return;
+
         ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const payload = encodeFrame(imageData);
         dataChannel.send(payload);
+
+        if (inferInFlight) return;
+        inferInFlight = true;
+
+        const selectedModel = document.getElementById("model").value;
 
         try {
           const response = await fetch(`${apiUrl}/vision/stream/predict`, {
@@ -255,35 +513,35 @@
               "Content-Type": "application/json",
               "X-API-Key": apiKey,
             },
-            body: JSON.stringify({ model: "diabetic-retinopathy-glaucoma-detector" }),
+            body: JSON.stringify({ model: selectedModel }),
           });
-          if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
-          }
+          if (!response.ok) throw new Error(`API error: ${response.status}`);
           const data = await response.json();
+
+          if (data.detections && data.image_size) {
+            const [w, h] = data.image_size.split("x").map(Number);
+            drawDetections(data.detections, w, h);
+          } else {
+            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+          }
+
+          updateStats(data);
           setMetrics(data.metrics || data);
         } catch (err) {
           setStatus(err.message);
+        } finally {
+          inferInFlight = false;
         }
       }
 
+      // ── Controls ──────────────────────────────────────────────────
+
       async function stopStream() {
-        if (timer) {
-          clearInterval(timer);
-          timer = null;
-        }
-        if (dataChannel) {
-          dataChannel.close();
-          dataChannel = null;
-        }
-        if (peerConnection) {
-          peerConnection.close();
-          peerConnection = null;
-        }
-        if (stream) {
-          stream.getTracks().forEach((track) => track.stop());
-          stream = null;
-        }
+        if (timer) { clearInterval(timer); timer = null; }
+        if (dataChannel) { dataChannel.close(); dataChannel = null; }
+        if (peerConnection) { peerConnection.close(); peerConnection = null; }
+        if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
+        overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
         setStatus("Stopped.");
       }
 
@@ -291,16 +549,18 @@
         setStatus("Connecting...");
         setMetrics("");
         try {
-          await createOffer();
+          if (modeSelect.value === "direct") {
+            await startDirect();
+          } else {
+            await startWebRTC();
+          }
         } catch (err) {
           console.error(err);
           setStatus(err.message || "Failed to start");
         }
       });
 
-      stopButton.addEventListener("click", () => {
-        stopStream();
-      });
+      stopButton.addEventListener("click", () => stopStream());
     </script>
   </body>
 </html>

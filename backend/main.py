@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Security, Depends, status, Form, Request, Response
 from fastapi.security import APIKeyHeader
+from fastapi.responses import HTMLResponse
 from starlette.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, Dict, Tuple
@@ -17,7 +18,7 @@ load_dotenv()
 
 from backend.registry import registry
 from backend.loader import load_plugins
-from backend.database import init_db, get_db, Prediction, GlossaryCache
+from backend.database import init_db, get_db, Prediction, GlossaryCache, ModelEvolution
 from backend.metrics import metrics_store
 from backend.metrics_prom import REQUESTS_TOTAL, REQUEST_LATENCY_MS, ACTIVE_REQUESTS, COMPUTE_MS, MODEL_LOAD_MS
 from backend.shm_frames import SharedMemoryFrameReader
@@ -224,7 +225,54 @@ async def predict(model_name: str, file: UploadFile = File(None), text_input: st
 
 
 class StreamPredictRequest(BaseModel):
-    model: str = "diabetic-retinopathy-glaucoma-detector"
+    model: str = "yolov8-seg"
+
+
+class StreamWindowRequest(BaseModel):
+    model: str = "yolov8-seg"
+    frames: int = 16
+
+
+class DirectDetectRequest(BaseModel):
+    model: str = "yolov8-seg"
+    image: str  # base64-encoded image (JPEG/PNG)
+
+
+@app.post("/vision/detect")
+async def vision_detect_direct(request: DirectDetectRequest):
+    """Direct frame detection — accepts a base64 image, returns detections.
+
+    No SHM or WebRTC gateway required. Ideal for local / Windows dev.
+    """
+    import base64
+
+    model = registry.get_model(request.model)
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    if hasattr(model, "ready") and not getattr(model, "ready", False):
+        start = time.perf_counter()
+        model.load()
+        duration_ms = (time.perf_counter() - start) * 1000.0
+        metrics_store.record_model_load(model.name, duration_ms)
+        MODEL_LOAD_MS.labels(model.name).observe(duration_ms)
+
+    try:
+        image_bytes = base64.b64decode(request.image)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 image data")
+
+    compute_start = time.perf_counter()
+    result = await model.predict(image_bytes)
+    compute_ms = (time.perf_counter() - compute_start) * 1000.0
+    metrics_store.record_compute(compute_ms)
+    COMPUTE_MS.observe(compute_ms)
+
+    if isinstance(result, dict):
+        result.setdefault("metrics", {})
+        result["metrics"]["compute_ms"] = compute_ms
+
+    return result
 
 
 @app.post("/vision/stream/predict", dependencies=[Depends(get_api_key)])
@@ -274,6 +322,40 @@ async def predict_stream(request: StreamPredictRequest, db: Session = Depends(ge
     db.refresh(db_prediction)
 
     return result
+
+
+@app.post("/vision/stream/window", dependencies=[Depends(get_api_key)])
+async def predict_stream_window(request: StreamWindowRequest):
+    """Read a temporal window of frames from the ring buffer.
+
+    Returns frame metadata for each frame in the window. This endpoint is
+    the foundation for temporal action recognition — downstream models
+    receive a sequence of frames rather than a single snapshot.
+    """
+    frames = shm_reader.read_window(n=min(request.frames, 64))
+    if not frames:
+        raise HTTPException(status_code=404, detail="No frames available in ring buffer")
+
+    frame_list = []
+    for f in frames:
+        frame_list.append({
+            "seq": f.seq,
+            "timestamp_ns": f.timestamp_ns,
+            "width": f.width,
+            "height": f.height,
+            "format": f.fmt,
+            "data_len": len(f.data),
+        })
+
+    return {
+        "frame_count": len(frames),
+        "oldest_seq": frames[0].seq,
+        "newest_seq": frames[-1].seq,
+        "span_ms": (frames[-1].timestamp_ns - frames[0].timestamp_ns) / 1_000_000
+        if len(frames) > 1
+        else 0.0,
+        "frames": frame_list,
+    }
 
 
 @app.get("/metrics", dependencies=[Depends(get_api_key)])
@@ -469,4 +551,311 @@ def list_glossary_cache(db: Session = Depends(get_db)):
         }
         for r in rows
     ]
+
+
+# ── Serve the vision client at /vision ──────────────────────────
+@app.get("/vision", response_class=HTMLResponse)
+def serve_vision_client():
+    """Serve the live detection client HTML page."""
+    client_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "frontend", "webrtc-client.html"
+    )
+    with open(client_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+
+# ── Model Evolution Tracking API ────────────────────────────────
+
+
+# V7 roadmap definition — used by the dashboard
+V7_ROADMAP = [
+    {"version": "V0", "name": "Baseline COCO", "goal": "Pretrained YOLOv8n-seg on COCO 80 classes, no fine-tuning"},
+    {"version": "V1", "name": "Sports Objects", "goal": "Fine-tune on sports equipment and courts"},
+    {"version": "V2", "name": "Athlete Pose", "goal": "Add pose estimation for athlete body keypoints"},
+    {"version": "V3", "name": "Basic Actions", "goal": "Temporal action classification (punch, kick, run, jump)"},
+    {"version": "V4", "name": "Sport-Specific", "goal": "Multi-sport action sets (MMA, basketball, soccer, tennis)"},
+    {"version": "V5", "name": "Sequence Understanding", "goal": "Multi-frame combos and movement sequences"},
+    {"version": "V6", "name": "Real-time + Edge", "goal": "Optimised for real-time edge inference (<10ms)"},
+    {"version": "V7", "name": "Universal Sports AI", "goal": "Any sport, any move, any combat style — production-ready"},
+]
+
+
+class EvolutionEntry(BaseModel):
+    model_type: str = "vision"  # "vision" | "llm" | "audio" | "multimodal" | "other"
+    version: str
+    iteration: int = 0
+    tag: str
+    description: str
+    changes: list[str] | None = None
+    # Model details
+    model_arch: str | None = None
+    model_weights: str | None = None
+    model_size_mb: float | None = None
+    model_params: int | None = None
+    training_data: str | None = None
+    training_epochs: int | None = None
+    training_time_min: float | None = None
+    # Shared
+    benchmark_dataset: str | None = None
+    num_eval_samples: int | None = None
+    num_eval_images: int | None = None
+    avg_inference_ms: float | None = None
+    status: str = "completed"
+    notes: str | None = None
+    metrics_raw: dict | None = None
+    # Vision metrics
+    mAP50: float | None = None
+    mAP50_95: float | None = None
+    precision: float | None = None
+    recall: float | None = None
+    f1_score: float | None = None
+    avg_detections: float | None = None
+    total_classes: int | None = None
+    target_classes: list[str] | None = None
+    per_class_ap: dict | None = None
+    mask_iou: float | None = None
+    fps: float | None = None
+    false_positive_rate: float | None = None
+    confidence_calibration: float | None = None
+    temporal_consistency: float | None = None
+    action_accuracy: float | None = None
+    action_classes: int | None = None
+    novel_detection_rate: float | None = None
+    # LLM metrics — knowledge & reasoning
+    mmlu_score: float | None = None
+    mmlu_pro_score: float | None = None
+    gpqa_score: float | None = None
+    arc_agi_score: float | None = None
+    hellaswag_score: float | None = None
+    bigbench_hard_score: float | None = None
+    truthfulqa_score: float | None = None
+    livebench_score: float | None = None
+    # LLM metrics — code
+    humaneval_score: float | None = None
+    humaneval_plus_score: float | None = None
+    mbpp_score: float | None = None
+    swe_bench_score: float | None = None
+    pass_at_1: float | None = None
+    # LLM metrics — math
+    math_score: float | None = None
+    gsm8k_score: float | None = None
+    # LLM metrics — conversational
+    chatbot_arena_elo: float | None = None
+    mt_bench_score: float | None = None
+    alpaca_eval_score: float | None = None
+    # LLM metrics — reliability
+    hallucination_rate: float | None = None
+    cot_consistency: float | None = None
+    # LLM metrics — safety
+    toxicity_score: float | None = None
+    bias_score: float | None = None
+    refusal_accuracy: float | None = None
+    # LLM metrics — throughput
+    context_window: int | None = None
+    ttft_ms: float | None = None
+    tokens_per_sec: float | None = None
+    total_tokens_eval: int | None = None
+    cost_per_1k_tokens: float | None = None
+
+
+@app.get("/vision/evolution")
+def list_evolution(db: Session = Depends(get_db)):
+    """List all model evolution entries, ordered by timestamp."""
+    rows = db.query(ModelEvolution).order_by(ModelEvolution.timestamp.asc()).all()
+    return [
+        {
+            "id": r.id,
+            "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+            "model_type": getattr(r, "model_type", "vision"),
+            "version": r.version,
+            "iteration": r.iteration,
+            "tag": r.tag,
+            "description": r.description,
+            "changes": r.changes,
+            "model_arch": r.model_arch,
+            "model_weights": r.model_weights,
+            "model_size_mb": r.model_size_mb,
+            "model_params": r.model_params,
+            "training_data": r.training_data,
+            "training_epochs": r.training_epochs,
+            "training_time_min": r.training_time_min,
+            "benchmark_dataset": r.benchmark_dataset,
+            "num_eval_samples": r.num_eval_samples,
+            "num_eval_images": r.num_eval_images,
+            "avg_inference_ms": r.avg_inference_ms,
+            "status": r.status,
+            "notes": r.notes,
+            "metrics_raw": r.metrics_raw,
+            # Vision
+            "mAP50": r.mAP50,
+            "mAP50_95": r.mAP50_95,
+            "precision": r.precision,
+            "recall": r.recall,
+            "f1_score": r.f1_score,
+            "avg_detections": r.avg_detections,
+            "total_classes": r.total_classes,
+            "target_classes": r.target_classes,
+            "per_class_ap": r.per_class_ap,
+            "mask_iou": r.mask_iou,
+            "fps": r.fps,
+            "false_positive_rate": r.false_positive_rate,
+            "confidence_calibration": r.confidence_calibration,
+            "temporal_consistency": r.temporal_consistency,
+            "action_accuracy": r.action_accuracy,
+            "action_classes": r.action_classes,
+            "novel_detection_rate": r.novel_detection_rate,
+            # LLM
+            "mmlu_score": r.mmlu_score,
+            "mmlu_pro_score": r.mmlu_pro_score,
+            "gpqa_score": r.gpqa_score,
+            "arc_agi_score": r.arc_agi_score,
+            "hellaswag_score": r.hellaswag_score,
+            "bigbench_hard_score": r.bigbench_hard_score,
+            "truthfulqa_score": r.truthfulqa_score,
+            "livebench_score": r.livebench_score,
+            "humaneval_score": r.humaneval_score,
+            "humaneval_plus_score": r.humaneval_plus_score,
+            "mbpp_score": r.mbpp_score,
+            "swe_bench_score": r.swe_bench_score,
+            "pass_at_1": r.pass_at_1,
+            "math_score": r.math_score,
+            "gsm8k_score": r.gsm8k_score,
+            "chatbot_arena_elo": r.chatbot_arena_elo,
+            "mt_bench_score": r.mt_bench_score,
+            "alpaca_eval_score": r.alpaca_eval_score,
+            "hallucination_rate": r.hallucination_rate,
+            "cot_consistency": r.cot_consistency,
+            "toxicity_score": r.toxicity_score,
+            "bias_score": r.bias_score,
+            "refusal_accuracy": r.refusal_accuracy,
+            "context_window": r.context_window,
+            "ttft_ms": r.ttft_ms,
+            "tokens_per_sec": r.tokens_per_sec,
+            "total_tokens_eval": r.total_tokens_eval,
+            "cost_per_1k_tokens": r.cost_per_1k_tokens,
+        }
+        for r in rows
+    ]
+
+
+@app.get("/vision/evolution/roadmap")
+def get_roadmap(db: Session = Depends(get_db)):
+    """Return the V7 roadmap with current progress overlaid."""
+    # Get the latest entry per version
+    latest_by_version: dict[str, dict] = {}
+    rows = db.query(ModelEvolution).order_by(ModelEvolution.timestamp.asc()).all()
+    for r in rows:
+        latest_by_version[r.version] = {
+            "id": r.id,
+            "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+            "model_type": getattr(r, "model_type", "vision"),
+            "tag": r.tag,
+            "iteration": r.iteration,
+            "mAP50": r.mAP50,
+            "precision": r.precision,
+            "avg_inference_ms": r.avg_inference_ms,
+            "status": r.status,
+            # LLM headline metrics
+            "mmlu_score": r.mmlu_score,
+            "humaneval_score": r.humaneval_score,
+            "chatbot_arena_elo": r.chatbot_arena_elo,
+            "tokens_per_sec": r.tokens_per_sec,
+        }
+
+    roadmap = []
+    for stage in V7_ROADMAP:
+        entry = {**stage, "status": "not-started", "latest": None}
+        if stage["version"] in latest_by_version:
+            entry["status"] = latest_by_version[stage["version"]].get("status", "completed")
+            entry["latest"] = latest_by_version[stage["version"]]
+        roadmap.append(entry)
+
+    return {
+        "roadmap": roadmap,
+        "total_entries": len(rows),
+        "current_version": rows[-1].version if rows else None,
+    }
+
+
+@app.get("/vision/evolution/latest")
+def latest_evolution(db: Session = Depends(get_db)):
+    """Get the most recent evolution entry."""
+    row = db.query(ModelEvolution).order_by(ModelEvolution.timestamp.desc()).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="No evolution entries yet")
+    return {
+        "id": row.id,
+        "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+        "model_type": getattr(row, "model_type", "vision"),
+        "version": row.version,
+        "iteration": row.iteration,
+        "tag": row.tag,
+        "description": row.description,
+        "mAP50": row.mAP50,
+        "precision": row.precision,
+        "avg_inference_ms": row.avg_inference_ms,
+        "total_classes": row.total_classes,
+        "status": row.status,
+        # LLM headline
+        "mmlu_score": row.mmlu_score,
+        "humaneval_score": row.humaneval_score,
+        "tokens_per_sec": row.tokens_per_sec,
+    }
+
+
+@app.post("/vision/evolution")
+def add_evolution(entry: EvolutionEntry, db: Session = Depends(get_db)):
+    """Add a new model evolution entry."""
+    row = ModelEvolution(**entry.model_dump())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "version": row.version, "tag": row.tag}
+
+
+# ── Metrics Catalog ────────────────────────────────────────────────
+from backend.metrics_catalog import (
+    catalog_json,
+    metrics_for_type,
+    METRICS_BY_KEY,
+    CATEGORIES,
+    MODEL_TYPES as CATALOG_MODEL_TYPES,
+)
+
+
+@app.get("/metrics/catalog")
+def get_metrics_catalog(model_type: str | None = None):
+    """Return the full metrics catalog, optionally filtered by model type.
+
+    Query params:
+        model_type — "llm", "vision", "audio", "video", "multimodal",
+                     "embeddings", "agentic".  Omit for the full list.
+    """
+    return {
+        "metrics": catalog_json(model_type),
+        "categories": CATEGORIES if not model_type else list(
+            dict.fromkeys(m.category for m in metrics_for_type(model_type))
+        ),
+        "model_types": CATALOG_MODEL_TYPES,
+        "total": len(catalog_json(model_type)),
+    }
+
+
+@app.get("/metrics/catalog/{key}")
+def get_metric_detail(key: str):
+    """Return a single metric definition by its key."""
+    m = METRICS_BY_KEY.get(key)
+    if not m:
+        raise HTTPException(status_code=404, detail=f"Metric '{key}' not found")
+    return {
+        "key": m.key,
+        "name": m.name,
+        "category": m.category,
+        "description": m.description,
+        "model_types": list(m.model_types),
+        "unit": m.unit,
+        "higher_is_better": m.higher_is_better,
+        "format": m.format,
+        "has_db_column": m.db_column is not None,
+    }
 

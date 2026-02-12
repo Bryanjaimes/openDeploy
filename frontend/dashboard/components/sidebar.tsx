@@ -12,6 +12,8 @@ import {
   Settings,
   KeyRound,
   Network,
+  TrendingUp,
+  BookOpen,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useApiKey } from "@/lib/use-api-key";
@@ -19,7 +21,9 @@ import { useApiKey } from "@/lib/use-api-key";
 const nav = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Models", href: "/models", icon: Cpu, glossary: "model" },
+  { label: "Evolution", href: "/evolution", icon: TrendingUp },
   { label: "Metrics", href: "/metrics", icon: BarChart3, glossary: "latency" },
+  { label: "Metric Catalog", href: "/metrics-catalog", icon: BookOpen },
   { label: "Architecture", href: "/architecture", icon: Network },
   { label: "History", href: "/history", icon: History },
   { label: "WebRTC", href: "/webrtc", icon: Video, glossary: "webrtc" },

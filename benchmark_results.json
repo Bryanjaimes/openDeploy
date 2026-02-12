@@ -1,0 +1,74 @@
+[
+  {
+    "id": 1,
+    "version": "V0",
+    "iteration": 0,
+    "tag": "Baseline",
+    "timestamp": "2026-02-12T13:30:33",
+    "num_images": 2,
+    "total_detections": 9,
+    "avg_detections_per_image": 4.5,
+    "avg_inference_ms": 24.73,
+    "avg_confidence": 0.7126,
+    "unique_classes_detected": 4,
+    "total_classes_available": 80,
+    "class_distribution": [
+      {
+        "class_id": 0,
+        "class_name": "person",
+        "count": 6
+      },
+      {
+        "class_id": 5,
+        "class_name": "bus",
+        "count": 1
+      },
+      {
+        "class_id": 36,
+        "class_name": "skateboard",
+        "count": 1
+      },
+      {
+        "class_id": 27,
+        "class_name": "tie",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "version": "V0",
+    "iteration": 0,
+    "tag": "Baseline",
+    "timestamp": "2026-02-12T13:36:28",
+    "num_images": 2,
+    "total_detections": 9,
+    "avg_detections_per_image": 4.5,
+    "avg_inference_ms": 24.82,
+    "avg_confidence": 0.7126,
+    "unique_classes_detected": 4,
+    "total_classes_available": 80,
+    "class_distribution": [
+      {
+        "class_id": 0,
+        "class_name": "person",
+        "count": 6
+      },
+      {
+        "class_id": 5,
+        "class_name": "bus",
+        "count": 1
+      },
+      {
+        "class_id": 36,
+        "class_name": "skateboard",
+        "count": 1
+      },
+      {
+        "class_id": 27,
+        "class_name": "tie",
+        "count": 1
+      }
+    ]
+  }
+]
