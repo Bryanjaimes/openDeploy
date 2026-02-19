@@ -1,6 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Security, Depends, status, Form, Request, Response
 from fastapi.security import APIKeyHeader
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from starlette.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, Dict, Tuple
@@ -9,6 +9,8 @@ import time
 import os
 import logging
 import threading
+import uuid
+import shutil
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
@@ -18,7 +20,7 @@ load_dotenv()
 
 from backend.registry import registry
 from backend.loader import load_plugins
-from backend.database import init_db, get_db, Prediction, GlossaryCache, ModelEvolution
+from backend.database import init_db, get_db, Prediction, GlossaryCache, ModelEvolution, Recording
 from backend.metrics import metrics_store
 from backend.metrics_prom import REQUESTS_TOTAL, REQUEST_LATENCY_MS, ACTIVE_REQUESTS, COMPUTE_MS, MODEL_LOAD_MS
 from backend.shm_frames import SharedMemoryFrameReader
@@ -74,6 +76,10 @@ app = FastAPI(
 )
 
 shm_reader = SharedMemoryFrameReader.from_env()
+
+# ── Recordings directory ───────────────────────────────────────
+RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "recordings")
+os.makedirs(RECORDINGS_DIR, exist_ok=True)
 
 # Enable CORS for frontend communication
 allowed_origins = [
@@ -660,8 +666,29 @@ class EvolutionEntry(BaseModel):
 
 @app.get("/vision/evolution")
 def list_evolution(db: Session = Depends(get_db)):
-    """List all model evolution entries, ordered by timestamp."""
+    """List all model evolution entries, ordered by timestamp, with linked recordings."""
     rows = db.query(ModelEvolution).order_by(ModelEvolution.timestamp.asc()).all()
+    all_recs = db.query(Recording).order_by(Recording.created_at.desc()).all()
+
+    # Build a map of evolution_id → recordings, plus unlinked ones matched by model_arch
+    recs_by_evo: dict[int, list] = {}
+    for rec in all_recs:
+        evo_id = getattr(rec, 'evolution_id', None)
+        if evo_id:
+            recs_by_evo.setdefault(evo_id, []).append(rec)
+
+    # Also try to match unlinked recordings by model_arch
+    for rec in all_recs:
+        if getattr(rec, 'evolution_id', None):
+            continue
+        rec_arch = getattr(rec, 'model_arch', None) or getattr(rec, 'model', None) or ''
+        if not rec_arch:
+            continue
+        for row in rows:
+            if row.model_arch and rec_arch.lower() in row.model_arch.lower():
+                recs_by_evo.setdefault(row.id, []).append(rec)
+                break
+
     return [
         {
             "id": r.id,
@@ -733,6 +760,11 @@ def list_evolution(db: Session = Depends(get_db)):
             "tokens_per_sec": r.tokens_per_sec,
             "total_tokens_eval": r.total_tokens_eval,
             "cost_per_1k_tokens": r.cost_per_1k_tokens,
+            # Linked recordings
+            "recordings": [
+                _serialize_recording(rec)
+                for rec in recs_by_evo.get(r.id, [])
+            ],
         }
         for r in rows
     ]
@@ -813,6 +845,39 @@ def add_evolution(entry: EvolutionEntry, db: Session = Depends(get_db)):
     return {"id": row.id, "version": row.version, "tag": row.tag}
 
 
+@app.get("/vision/evolution/{evo_id}/recordings")
+def evolution_recordings(evo_id: int, db: Session = Depends(get_db)):
+    """Get all recordings linked to a specific evolution entry."""
+    evo = db.query(ModelEvolution).filter(ModelEvolution.id == evo_id).first()
+    if not evo:
+        raise HTTPException(status_code=404, detail="Evolution entry not found")
+
+    # Direct link via FK
+    recs = db.query(Recording).filter(
+        Recording.evolution_id == evo_id
+    ).order_by(Recording.created_at.desc()).all()
+
+    # Also match by model_arch if no FK link
+    if not recs and evo.model_arch:
+        recs = db.query(Recording).filter(
+            Recording.model_arch.ilike(f"%{evo.model_arch}%")
+        ).order_by(Recording.created_at.desc()).all()
+        # Fallback: match by model name
+        if not recs:
+            recs = db.query(Recording).filter(
+                Recording.model.ilike(f"%{evo.model_arch.split('-')[0]}%")
+            ).order_by(Recording.created_at.desc()).all()
+
+    return {
+        "evolution_id": evo_id,
+        "version": evo.version,
+        "tag": evo.tag,
+        "model_arch": evo.model_arch,
+        "recordings": [_serialize_recording(r) for r in recs],
+        "total": len(recs),
+    }
+
+
 # ── Metrics Catalog ────────────────────────────────────────────────
 from backend.metrics_catalog import (
     catalog_json,
@@ -821,6 +886,179 @@ from backend.metrics_catalog import (
     CATEGORIES,
     MODEL_TYPES as CATALOG_MODEL_TYPES,
 )
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Recordings — upload, list, download, delete
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/recordings/upload")
+async def upload_recording(
+    video: UploadFile = File(...),
+    log: UploadFile = File(None),
+    name: str = Form(""),
+    duration_ms: int = Form(0),
+    total_frames: int = Form(0),
+    total_detections: int = Form(0),
+    unique_classes: int = Form(0),
+    avg_confidence: float = Form(0.0),
+    avg_inference_ms: float = Form(0.0),
+    model: str = Form(""),
+    classes_seen: str = Form("[]"),
+    model_arch: str = Form(""),
+    model_version: str = Form(""),
+    conf_threshold: float = Form(0.0),
+    iou_threshold: float = Form(0.0),
+    db: Session = Depends(get_db),
+):
+    """Upload a composite recording (video + optional log) from the live detection client."""
+    import json as _json
+
+    rec_id = uuid.uuid4().hex[:12]
+    if not name:
+        name = f"rec_{rec_id}"
+
+    # Save video
+    video_filename = f"{rec_id}.webm"
+    video_path = os.path.join(RECORDINGS_DIR, video_filename)
+    with open(video_path, "wb") as f:
+        shutil.copyfileobj(video.file, f)
+    video_size = os.path.getsize(video_path)
+
+    # Save log (if provided)
+    log_filename = None
+    log_size = None
+    if log and log.filename:
+        log_filename = f"{rec_id}.txt"
+        log_path_full = os.path.join(RECORDINGS_DIR, log_filename)
+        with open(log_path_full, "wb") as f:
+            shutil.copyfileobj(log.file, f)
+        log_size = os.path.getsize(log_path_full)
+
+    # Parse classes_seen
+    try:
+        classes_list = _json.loads(classes_seen)
+    except Exception:
+        classes_list = []
+
+    # Match to latest evolution entry (by model_arch or model name)
+    evolution_id_val = None
+    if model_arch or model:
+        match_arch = model_arch or model
+        evo_row = db.query(ModelEvolution).filter(
+            ModelEvolution.model_arch.ilike(f"%{match_arch}%")
+        ).order_by(ModelEvolution.timestamp.desc()).first()
+        if evo_row:
+            evolution_id_val = evo_row.id
+
+    # DB record
+    rec = Recording(
+        name=name,
+        video_path=video_filename,
+        log_path=log_filename,
+        duration_ms=duration_ms,
+        total_frames=total_frames,
+        total_detections=total_detections,
+        unique_classes=unique_classes,
+        avg_confidence=avg_confidence,
+        avg_inference_ms=avg_inference_ms,
+        model=model,
+        classes_seen=classes_list,
+        model_arch=model_arch or None,
+        model_version=model_version or None,
+        conf_threshold=conf_threshold or None,
+        iou_threshold=iou_threshold or None,
+        evolution_id=evolution_id_val,
+        video_size_bytes=video_size,
+        log_size_bytes=log_size,
+    )
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+
+    return {
+        "id": rec.id,
+        "name": rec.name,
+        "video_size": video_size,
+        "log_size": log_size,
+        "message": "Recording saved to server",
+    }
+
+
+@app.get("/recordings")
+def list_recordings(db: Session = Depends(get_db)):
+    """List all saved recordings, newest first."""
+    recs = db.query(Recording).order_by(Recording.created_at.desc()).all()
+    return {
+        "recordings": [_serialize_recording(r) for r in recs],
+        "total": len(recs),
+    }
+
+
+def _serialize_recording(r: Recording) -> dict:
+    return {
+        "id": r.id,
+        "name": r.name,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+        "duration_ms": r.duration_ms,
+        "total_frames": r.total_frames,
+        "total_detections": r.total_detections,
+        "unique_classes": r.unique_classes,
+        "avg_confidence": r.avg_confidence,
+        "avg_inference_ms": r.avg_inference_ms,
+        "model": r.model,
+        "classes_seen": r.classes_seen,
+        "model_arch": getattr(r, 'model_arch', None),
+        "model_version": getattr(r, 'model_version', None),
+        "conf_threshold": getattr(r, 'conf_threshold', None),
+        "iou_threshold": getattr(r, 'iou_threshold', None),
+        "evolution_id": getattr(r, 'evolution_id', None),
+        "video_size_bytes": r.video_size_bytes,
+        "log_size_bytes": r.log_size_bytes,
+    }
+
+
+@app.get("/recordings/{rec_id}/video")
+def download_recording_video(rec_id: int, db: Session = Depends(get_db)):
+    """Stream the recording video file."""
+    rec = db.query(Recording).filter(Recording.id == rec_id).first()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    path = os.path.join(RECORDINGS_DIR, rec.video_path)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Video file missing")
+    return FileResponse(path, media_type="video/webm", filename=f"{rec.name}.webm")
+
+
+@app.get("/recordings/{rec_id}/log")
+def download_recording_log(rec_id: int, db: Session = Depends(get_db)):
+    """Download the recording's detection log."""
+    rec = db.query(Recording).filter(Recording.id == rec_id).first()
+    if not rec or not rec.log_path:
+        raise HTTPException(status_code=404, detail="Log not found")
+    path = os.path.join(RECORDINGS_DIR, rec.log_path)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Log file missing")
+    return FileResponse(path, media_type="text/plain", filename=f"{rec.name}_log.txt")
+
+
+@app.delete("/recordings/{rec_id}")
+def delete_recording(rec_id: int, db: Session = Depends(get_db)):
+    """Delete a recording and its files."""
+    rec = db.query(Recording).filter(Recording.id == rec_id).first()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Recording not found")
+
+    # Remove files
+    for fname in [rec.video_path, rec.log_path]:
+        if fname:
+            fpath = os.path.join(RECORDINGS_DIR, fname)
+            if os.path.exists(fpath):
+                os.remove(fpath)
+
+    db.delete(rec)
+    db.commit()
+    return {"message": "Recording deleted", "id": rec_id}
 
 
 @app.get("/metrics/catalog")

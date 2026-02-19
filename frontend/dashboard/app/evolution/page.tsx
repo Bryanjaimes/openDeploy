@@ -5,6 +5,7 @@ import {
   fetchEvolution,
   fetchRoadmap,
   type EvolutionEntry,
+  type RecordingEntry,
   type RoadmapResponse,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -94,6 +95,7 @@ export default function EvolutionPage() {
     recall: e.recall != null ? +(e.recall * 100).toFixed(1) : null,
     f1: e.f1_score != null ? +(e.f1_score * 100).toFixed(1) : null,
     inferenceMs: e.avg_inference_ms,
+    fps: e.fps,
     detections: e.avg_detections,
   }));
 
@@ -160,8 +162,8 @@ export default function EvolutionPage() {
                   style={{
                     backgroundColor: active ? m.color + "25" : undefined,
                     color: active || hasData ? m.color : undefined,
-                    ringColor: active ? m.color : undefined,
-                  }}
+                    ["--tw-ring-color" as string]: active ? m.color : undefined,
+                  } as React.CSSProperties}
                 >
                   <span>{m.emoji}</span>
                   <span>{v}</span>
@@ -206,6 +208,7 @@ export default function EvolutionPage() {
               <Stat label="Confidence" value={fmtPct(latest.precision)} accent={versionMeta[selectedVersion].color} />
               <Stat label="mAP@50" value={fmtPct(latest.mAP50)} />
               <Stat label="Inference" value={latest.avg_inference_ms != null ? `${fmt(latest.avg_inference_ms)}ms` : "—"} />
+              <Stat label="FPS" value={latest.fps != null ? fmt(latest.fps) : "—"} />
               <Stat label="Detections" value={fmt(latest.avg_detections)} />
               <Stat label="Classes" value={latest.total_classes != null ? String(latest.total_classes) : "—"} />
             </div>
@@ -417,6 +420,7 @@ export default function EvolutionPage() {
                       <Pill label="Speed" value={entry.avg_inference_ms != null ? `${fmt(entry.avg_inference_ms)}ms` : "—"} />
                       <Pill label="Dets" value={fmt(entry.avg_detections)} />
                       <Pill label="Cls" value={entry.total_classes != null ? String(entry.total_classes) : "—"} />
+                      <Pill label="FPS" value={entry.fps != null ? fmt(entry.fps) : "—"} />
                       <Pill label="Imgs" value={entry.num_eval_images != null ? String(entry.num_eval_images) : "—"} />
                     </div>
 
@@ -432,6 +436,30 @@ export default function EvolutionPage() {
                       </ul>
                     )}
 
+                    {/* Per-class AP */}
+                    {entry.per_class_ap && Object.keys(entry.per_class_ap).length > 0 && (
+                      <div className="mt-3 pt-2 border-t border-border/30">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Per-Class Confidence</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-1">
+                          {Object.entries(entry.per_class_ap as Record<string, number>)
+                            .sort(([, a], [, b]) => b - a)
+                            .slice(0, 8)
+                            .map(([cls, ap]) => (
+                              <div key={cls} className="flex items-center gap-1.5 text-[11px]">
+                                <div className="flex-1 bg-muted/60 rounded-full h-1.5 overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full"
+                                    style={{ width: `${(ap * 100)}%`, backgroundColor: m?.color ?? '#888' }}
+                                  />
+                                </div>
+                                <span className="text-muted-foreground whitespace-nowrap">{cls}</span>
+                                <span className="font-medium tabular-nums">{(ap * 100).toFixed(0)}%</span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Target classes */}
                     {entry.target_classes && entry.target_classes.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1">
@@ -443,6 +471,20 @@ export default function EvolutionPage() {
                         {entry.target_classes.length > 12 && (
                           <span className="text-[10px] text-muted-foreground/60">+{entry.target_classes.length - 12} more</span>
                         )}
+                      </div>
+                    )}
+
+                    {/* Linked Recordings */}
+                    {entry.recordings && entry.recordings.length > 0 && (
+                      <div className="mt-3 pt-2 border-t border-border/30">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                          <span>🎬</span> Recordings ({entry.recordings.length})
+                        </p>
+                        <div className="space-y-1.5">
+                          {entry.recordings.map((rec) => (
+                            <RecordingRow key={rec.id} rec={rec} accentColor={m?.color} />
+                          ))}
+                        </div>
                       </div>
                     )}
                   </CardContent>
@@ -489,4 +531,93 @@ function Pill({ label, value, color }: { label: string; value: string; color?: s
       <span className="font-semibold">{value}</span>
     </span>
   );
+}
+
+function RecordingRow({ rec, accentColor }: { rec: RecordingEntry; accentColor?: string }) {
+  const dur = rec.duration_ms ? fmtDur(rec.duration_ms) : "--";
+  const conf = rec.avg_confidence != null ? `${(rec.avg_confidence * 100).toFixed(1)}%` : "--";
+  const infer = rec.avg_inference_ms != null ? `${rec.avg_inference_ms.toFixed(1)}ms` : "--";
+
+  return (
+    <div className="flex items-center gap-2 rounded-md bg-muted/40 px-3 py-2 text-xs group hover:bg-muted/70 transition-colors">
+      {/* Play / download buttons */}
+      <div className="flex items-center gap-1 shrink-0">
+        {rec.has_video && (
+          <a
+            href={`/api/recordings/${rec.id}/video`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center w-6 h-6 rounded bg-background/60 hover:bg-background text-muted-foreground hover:text-foreground transition-colors"
+            title="Play video"
+          >
+            ▶
+          </a>
+        )}
+        {rec.has_log && (
+          <a
+            href={`/api/recordings/${rec.id}/log`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center w-6 h-6 rounded bg-background/60 hover:bg-background text-muted-foreground hover:text-foreground transition-colors"
+            title="View log"
+          >
+            📋
+          </a>
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="font-medium truncate">{rec.name}</span>
+          {rec.model_arch && (
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
+              style={{ backgroundColor: (accentColor ?? "#888") + "20", color: accentColor }}
+            >
+              {rec.model_arch}
+            </span>
+          )}
+          {rec.model_version && (
+            <span className="text-[10px] text-muted-foreground">{rec.model_version}</span>
+          )}
+        </div>
+        <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
+          <span>{dur}</span>
+          <span>·</span>
+          <span>{rec.total_detections ?? 0} det</span>
+          <span>·</span>
+          <span>{rec.unique_classes ?? 0} cls</span>
+          <span>·</span>
+          <span>avg {conf}</span>
+          <span>·</span>
+          <span>{infer} infer</span>
+          {rec.conf_threshold != null && (
+            <>
+              <span>·</span>
+              <span>conf≥{rec.conf_threshold.toFixed(2)}</span>
+            </>
+          )}
+          {rec.iou_threshold != null && (
+            <>
+              <span>·</span>
+              <span>IoU≥{rec.iou_threshold.toFixed(2)}</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Timestamp */}
+      <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
+        {new Date(rec.timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+      </span>
+    </div>
+  );
+}
+
+function fmtDur(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return m > 0 ? `${m}m${sec.toString().padStart(2, "0")}s` : `${sec}s`;
 }

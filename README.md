@@ -378,6 +378,18 @@ Grafana dashboard is auto-provisioned at http://localhost:3002 with request rate
 - [ ] OCI artifact push via ORAS
 - [ ] GPU sharing and request batching
 
+## � Documentation
+
+| Document | What's Inside |
+|----------|---------------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System context diagram, component breakdown, design trade-offs, observability, security |
+| [docs/VISION_PIPELINE.md](docs/VISION_PIPELINE.md) | Complete YOLO webcam pipeline deep-dive — data flow, SHM protocol, every iteration, threshold sweep methodology |
+| [docs/BENCHMARK_REPORT.md](docs/BENCHMARK_REPORT.md) | Human-readable benchmark evolution — all runs with tables, percentiles, cross-iteration comparison |
+| [CHANGELOG.md](CHANGELOG.md) | Version-by-version log of every shipped change (V0 → V7-P1) |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute — setup, testing, adding models, PR process, code style |
+| [k8s/README.md](k8s/README.md) | Kubernetes operator setup, KEDA scale-to-zero, Karpenter node provisioning |
+| [models/README.md](models/README.md) | Model plugin quick reference |
+
 ## 📄 License
 
 MIT
@@ -385,6 +397,10 @@ MIT
 ## 📞 Links
 
 - **Architecture Deep-Dive**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **Vision Pipeline Deep-Dive**: [docs/VISION_PIPELINE.md](docs/VISION_PIPELINE.md)
+- **Benchmark Report**: [docs/BENCHMARK_REPORT.md](docs/BENCHMARK_REPORT.md)
+- **Changelog**: [CHANGELOG.md](CHANGELOG.md)
+- **Contributing**: [CONTRIBUTING.md](CONTRIBUTING.md)
 - **Issues**: [GitHub Issues](https://github.com/Bryanjaimes/openDeploy/issues)
 
 ---

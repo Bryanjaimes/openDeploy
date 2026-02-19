@@ -46,9 +46,23 @@ COCO_NAMES = [
 class YOLOv8SegModel(AIModel):
     """YOLOv8-seg instance segmentation via ONNX Runtime or Triton."""
 
-    CONF_THRESHOLD = 0.25
-    IOU_THRESHOLD = 0.45
-    INPUT_SIZE = 640
+    # Defaults (overridable via constructor)
+    DEFAULT_CONF_THRESHOLD = 0.25
+    DEFAULT_IOU_THRESHOLD = 0.45
+    DEFAULT_INPUT_SIZE = 640
+
+    def __init__(
+        self,
+        conf_threshold: float | None = None,
+        iou_threshold: float | None = None,
+        input_size: int | None = None,
+        onnx_path: str | None = None,
+    ):
+        self.CONF_THRESHOLD = conf_threshold or self.DEFAULT_CONF_THRESHOLD
+        self.IOU_THRESHOLD = iou_threshold or self.DEFAULT_IOU_THRESHOLD
+        self.INPUT_SIZE = input_size or self.DEFAULT_INPUT_SIZE
+        self._onnx_path_override = onnx_path
+        self.ready = False
 
     # ── AIModel interface ────────────────────────────────────────────
 
@@ -99,18 +113,21 @@ class YOLOv8SegModel(AIModel):
     def _load_onnx(self) -> None:
         import onnxruntime as ort
 
-        model_path = os.getenv(
-            "YOLO_SEG_ONNX_PATH",
-            os.path.join(
-                os.path.dirname(__file__),
-                "..",
-                "triton_model_repo",
-                "yolov8_seg",
-                "1",
-                "model.onnx",
-            ),
-        )
-        model_path = os.path.abspath(model_path)
+        if self._onnx_path_override:
+            model_path = os.path.abspath(self._onnx_path_override)
+        else:
+            model_path = os.getenv(
+                "YOLO_SEG_ONNX_PATH",
+                os.path.join(
+                    os.path.dirname(__file__),
+                    "..",
+                    "triton_model_repo",
+                    "yolov8_seg",
+                    "1",
+                    "model.onnx",
+                ),
+            )
+            model_path = os.path.abspath(model_path)
         if not os.path.isfile(model_path):
             raise FileNotFoundError(f"ONNX model not found at {model_path}")
 

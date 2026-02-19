@@ -1,0 +1,381 @@
+OpenDeploy Detection Session Log
+Recording: rec_2026-02-13-01-33-37
+Duration:  00:00:49
+Frames:    529
+Detections:1235
+Classes:   16
+Avg Conf:  56.7%
+Avg Infer: 24.4ms
+
+─── Event Log ───
+[00:00:00] Stream started — direct mode
+[00:00:00] person appeared — 91.1% confidence
+[00:00:00] airplane appeared — 65.0% confidence
+[00:00:01] airplane lost from frame
+[00:00:01] airplane appeared — 26.4% confidence
+[00:00:01] airplane lost from frame
+[00:00:01] couch appeared — 31.8% confidence
+[00:00:01] couch lost from frame
+[00:00:01] airplane appeared — 26.6% confidence
+[00:00:02] couch appeared — 25.1% confidence
+[00:00:02] airplane lost from frame
+[00:00:02] couch lost from frame
+[00:00:02] airplane appeared — 30.1% confidence
+[00:00:02] couch appeared — 40.0% confidence
+[00:00:02] airplane lost from frame
+[00:00:02] airplane appeared — 26.2% confidence
+[00:00:02] tv appeared — 25.8% confidence
+[00:00:02] tv lost from frame
+[00:00:02] tv appeared — 25.1% confidence
+[00:00:02] airplane lost from frame
+[00:00:02] tv lost from frame
+[00:00:03] couch lost from frame
+[00:00:03] airplane appeared — 32.1% confidence
+[00:00:03] Frame #30: 3 det — person, airplane (avg 51%)
+[00:00:03] airplane lost from frame
+[00:00:03] airplane appeared — 26.6% confidence
+[00:00:03] airplane lost from frame
+[00:00:03] airplane appeared — 32.1% confidence
+[00:00:04] couch appeared — 26.9% confidence
+[00:00:04] couch lost from frame
+[00:00:04] airplane lost from frame
+[00:00:04] Recording started
+[00:00:05] couch appeared — 50.8% confidence
+[00:00:05] tv appeared — 34.3% confidence
+[00:00:05] airplane appeared — 30.0% confidence
+[00:00:05] airplane lost from frame
+[00:00:05] airplane appeared — 31.8% confidence
+[00:00:05] couch lost from frame
+[00:00:05] airplane lost from frame
+[00:00:06] couch appeared — 47.0% confidence
+[00:00:06] couch lost from frame
+[00:00:06] tv lost from frame
+[00:00:06] Frame #60: 2 det — person (avg 62%)
+[00:00:06] cup appeared — 25.2% confidence
+[00:00:06] cup lost from frame
+[00:00:06] toothbrush appeared — 77.9% confidence
+[00:00:06] airplane appeared — 28.6% confidence
+[00:00:06] airplane lost from frame
+[00:00:08] toothbrush lost from frame
+[00:00:08] toothbrush appeared — 33.5% confidence
+[00:00:09] toothbrush lost from frame
+[00:00:09] Frame #90: 1 det — person (avg 81%)
+[00:00:09] remote appeared — 30.9% confidence
+[00:00:09] laptop appeared — 33.0% confidence
+[00:00:09] remote lost from frame
+[00:00:09] couch appeared — 25.0% confidence
+[00:00:09] laptop lost from frame
+[00:00:09] couch lost from frame
+[00:00:10] couch appeared — 46.1% confidence
+[00:00:10] laptop appeared — 26.5% confidence
+[00:00:10] couch lost from frame
+[00:00:10] laptop lost from frame
+[00:00:11] remote appeared — 61.4% confidence
+[00:00:11] remote lost from frame
+[00:00:11] remote appeared — 33.6% confidence
+[00:00:12] Frame #120: 2 det — person, remote (avg 66%)
+[00:00:13] remote lost from frame
+[00:00:13] remote appeared — 43.6% confidence
+[00:00:14] bottle appeared — 31.1% confidence
+[00:00:14] bottle lost from frame
+[00:00:14] bottle appeared — 37.5% confidence
+[00:00:15] remote lost from frame
+[00:00:15] remote appeared — 28.3% confidence
+[00:00:15] bottle lost from frame
+[00:00:15] chair appeared — 55.3% confidence
+[00:00:15] remote lost from frame
+[00:00:15] Frame #150: 2 det — person, chair (avg 69%)
+[00:00:15] chair lost from frame
+[00:00:15] couch appeared — 35.9% confidence
+[00:00:16] couch lost from frame
+[00:00:16] laptop appeared — 26.6% confidence
+[00:00:16] laptop lost from frame
+[00:00:16] couch appeared — 30.8% confidence
+[00:00:17] couch lost from frame
+[00:00:17] couch appeared — 26.1% confidence
+[00:00:17] couch lost from frame
+[00:00:17] cell phone appeared — 29.9% confidence
+[00:00:17] cell phone lost from frame
+[00:00:18] bottle appeared — 27.9% confidence
+[00:00:18] cell phone appeared — 45.6% confidence
+[00:00:18] Frame #180: 3 det — person, cell phone, bottle (avg 52%)
+[00:00:18] cell phone lost from frame
+[00:00:18] bottle lost from frame
+[00:00:18] cell phone appeared — 47.1% confidence
+[00:00:18] cell phone lost from frame
+[00:00:19] cell phone appeared — 26.0% confidence
+[00:00:19] cell phone lost from frame
+[00:00:20] toothbrush appeared — 25.1% confidence
+[00:00:20] toothbrush lost from frame
+[00:00:20] remote appeared — 42.0% confidence
+[00:00:20] cell phone appeared — 63.8% confidence
+[00:00:20] remote lost from frame
+[00:00:20] remote appeared — 46.3% confidence
+[00:00:20] cell phone lost from frame
+[00:00:21] cell phone appeared — 57.1% confidence
+[00:00:21] remote lost from frame
+[00:00:21] remote appeared — 49.6% confidence
+[00:00:21] cell phone lost from frame
+[00:00:21] remote lost from frame
+[00:00:21] Frame #210: 1 det — person (avg 89%)
+[00:00:21] couch appeared — 32.5% confidence
+[00:00:21] tv appeared — 30.3% confidence
+[00:00:22] tv lost from frame
+[00:00:22] fork appeared — 38.4% confidence
+[00:00:22] fork lost from frame
+[00:00:23] airplane appeared — 27.1% confidence
+[00:00:23] chair appeared — 26.7% confidence
+[00:00:23] airplane lost from frame
+[00:00:23] tv appeared — 34.6% confidence
+[00:00:23] airplane appeared — 27.3% confidence
+[00:00:23] chair lost from frame
+[00:00:23] chair appeared — 28.8% confidence
+[00:00:24] airplane lost from frame
+[00:00:24] airplane appeared — 26.1% confidence
+[00:00:24] couch lost from frame
+[00:00:24] tv lost from frame
+[00:00:24] airplane lost from frame
+[00:00:24] chair lost from frame
+[00:00:24] Frame #240: 1 det — person (avg 79%)
+[00:00:24] frisbee appeared — 26.8% confidence
+[00:00:24] frisbee lost from frame
+[00:00:25] chair appeared — 36.6% confidence
+[00:00:25] chair lost from frame
+[00:00:26] fork appeared — 35.2% confidence
+[00:00:26] fork lost from frame
+[00:00:26] chair appeared — 28.4% confidence
+[00:00:26] bottle appeared — 25.5% confidence
+[00:00:26] chair lost from frame
+[00:00:26] bottle lost from frame
+[00:00:26] chair appeared — 26.8% confidence
+[00:00:26] airplane appeared — 28.8% confidence
+[00:00:26] chair lost from frame
+[00:00:26] airplane lost from frame
+[00:00:27] chair appeared — 26.1% confidence
+[00:00:27] chair lost from frame
+[00:00:27] couch appeared — 30.5% confidence
+[00:00:27] chair appeared — 27.2% confidence
+[00:00:27] couch lost from frame
+[00:00:27] sports ball appeared — 73.8% confidence
+[00:00:27] couch appeared — 42.1% confidence
+[00:00:27] sports ball lost from frame
+[00:00:27] Frame #270: 3 det — person, couch, chair (avg 53%)
+[00:00:27] chair lost from frame
+[00:00:27] chair appeared — 32.0% confidence
+[00:00:29] chair lost from frame
+[00:00:29] chair appeared — 26.8% confidence
+[00:00:29] chair lost from frame
+[00:00:29] airplane appeared — 25.6% confidence
+[00:00:29] couch lost from frame
+[00:00:29] airplane lost from frame
+[00:00:29] airplane appeared — 36.2% confidence
+[00:00:30] airplane lost from frame
+[00:00:30] couch appeared — 38.9% confidence
+[00:00:30] couch lost from frame
+[00:00:30] Frame #300: 1 det — person (avg 89%)
+[00:00:30] couch appeared — 28.1% confidence
+[00:00:30] couch lost from frame
+[00:00:31] couch appeared — 35.8% confidence
+[00:00:31] couch lost from frame
+[00:00:31] couch appeared — 30.1% confidence
+[00:00:31] couch lost from frame
+[00:00:31] couch appeared — 30.0% confidence
+[00:00:32] couch lost from frame
+[00:00:32] couch appeared — 32.2% confidence
+[00:00:32] tv appeared — 25.7% confidence
+[00:00:32] tv lost from frame
+[00:00:32] couch lost from frame
+[00:00:32] airplane appeared — 26.1% confidence
+[00:00:32] tv appeared — 25.9% confidence
+[00:00:32] couch appeared — 32.9% confidence
+[00:00:32] book appeared — 26.5% confidence
+[00:00:32] airplane lost from frame
+[00:00:32] tv lost from frame
+[00:00:33] tv appeared — 25.3% confidence
+[00:00:33] couch lost from frame
+[00:00:33] book lost from frame
+[00:00:33] couch appeared — 30.2% confidence
+[00:00:33] airplane appeared — 31.9% confidence
+[00:00:33] airplane lost from frame
+[00:00:33] Frame #330: 3 det — person, tv, couch (avg 51%)
+[00:00:33] airplane appeared — 30.0% confidence
+[00:00:33] airplane lost from frame
+[00:00:33] bottle appeared — 28.4% confidence
+[00:00:33] airplane appeared — 27.3% confidence
+[00:00:34] bottle lost from frame
+[00:00:34] airplane lost from frame
+[00:00:34] airplane appeared — 34.0% confidence
+[00:00:34] airplane lost from frame
+[00:00:34] airplane appeared — 29.4% confidence
+[00:00:35] couch lost from frame
+[00:00:35] couch appeared — 43.5% confidence
+[00:00:35] bottle appeared — 30.3% confidence
+[00:00:35] bottle lost from frame
+[00:00:35] airplane lost from frame
+[00:00:36] airplane appeared — 38.0% confidence
+[00:00:36] airplane lost from frame
+[00:00:36] airplane appeared — 29.9% confidence
+[00:00:36] Frame #360: 4 det — person, tv, couch, airplane (avg 48%)
+[00:00:36] couch lost from frame
+[00:00:37] airplane lost from frame
+[00:00:37] airplane appeared — 32.4% confidence
+[00:00:37] couch appeared — 33.2% confidence
+[00:00:37] cell phone appeared — 28.7% confidence
+[00:00:37] cell phone lost from frame
+[00:00:37] cell phone appeared — 35.5% confidence
+[00:00:37] cell phone lost from frame
+[00:00:37] remote appeared — 31.2% confidence
+[00:00:37] couch lost from frame
+[00:00:38] couch appeared — 34.6% confidence
+[00:00:38] couch lost from frame
+[00:00:38] couch appeared — 33.3% confidence
+[00:00:38] airplane lost from frame
+[00:00:38] airplane appeared — 35.6% confidence
+[00:00:38] remote lost from frame
+[00:00:38] couch lost from frame
+[00:00:38] airplane lost from frame
+[00:00:38] remote appeared — 61.0% confidence
+[00:00:38] couch appeared — 40.8% confidence
+[00:00:38] airplane appeared — 30.4% confidence
+[00:00:39] remote lost from frame
+[00:00:39] remote appeared — 49.7% confidence
+[00:00:39] couch lost from frame
+[00:00:39] couch appeared — 29.9% confidence
+[00:00:39] bottle appeared — 28.6% confidence
+[00:00:39] couch lost from frame
+[00:00:39] bottle lost from frame
+[00:00:39] Frame #390: 4 det — person, remote, tv, airplane (avg 61%)
+[00:00:40] couch appeared — 30.0% confidence
+[00:00:40] remote lost from frame
+[00:00:40] tv lost from frame
+[00:00:40] airplane lost from frame
+[00:00:40] airplane appeared — 37.7% confidence
+[00:00:40] tv appeared — 35.4% confidence
+[00:00:40] tv lost from frame
+[00:00:41] tv appeared — 28.4% confidence
+[00:00:41] tv lost from frame
+[00:00:41] couch lost from frame
+[00:00:41] couch appeared — 37.8% confidence
+[00:00:41] airplane lost from frame
+[00:00:41] airplane appeared — 29.8% confidence
+[00:00:41] airplane lost from frame
+[00:00:41] tv appeared — 30.7% confidence
+[00:00:41] airplane appeared — 28.1% confidence
+[00:00:42] couch lost from frame
+[00:00:42] airplane lost from frame
+[00:00:42] remote appeared — 34.6% confidence
+[00:00:42] couch appeared — 32.3% confidence
+[00:00:42] bottle appeared — 43.9% confidence
+[00:00:42] bottle appeared — 29.5% confidence
+[00:00:42] remote lost from frame
+[00:00:42] couch lost from frame
+[00:00:42] bottle lost from frame
+[00:00:42] couch appeared — 26.2% confidence
+[00:00:42] tv lost from frame
+[00:00:42] Frame #420: 2 det — person, couch (avg 62%)
+[00:00:43] couch lost from frame
+[00:00:43] tv appeared — 25.2% confidence
+[00:00:43] tv lost from frame
+[00:00:43] couch appeared — 41.6% confidence
+[00:00:43] tv appeared — 30.1% confidence
+[00:00:43] bottle appeared — 27.8% confidence
+[00:00:43] bottle lost from frame
+[00:00:43] tv lost from frame
+[00:00:43] airplane appeared — 28.5% confidence
+[00:00:43] remote appeared — 45.4% confidence
+[00:00:43] airplane lost from frame
+[00:00:43] couch lost from frame
+[00:00:43] remote lost from frame
+[00:00:44] tv appeared — 25.8% confidence
+[00:00:44] tv lost from frame
+[00:00:44] bottle appeared — 28.4% confidence
+[00:00:44] couch appeared — 25.7% confidence
+[00:00:44] couch lost from frame
+[00:00:44] airplane appeared — 28.1% confidence
+[00:00:44] couch appeared — 25.8% confidence
+[00:00:44] airplane lost from frame
+[00:00:45] airplane appeared — 26.1% confidence
+[00:00:45] couch lost from frame
+[00:00:45] couch appeared — 46.2% confidence
+[00:00:45] airplane lost from frame
+[00:00:45] airplane appeared — 26.3% confidence
+[00:00:45] airplane lost from frame
+[00:00:45] couch lost from frame
+[00:00:45] Frame #450: 3 det — person, bottle (avg 54%)
+[00:00:46] couch appeared — 30.3% confidence
+[00:00:46] tv appeared — 28.0% confidence
+[00:00:46] airplane appeared — 25.2% confidence
+[00:00:46] tv lost from frame
+[00:00:46] couch lost from frame
+[00:00:46] airplane lost from frame
+[00:00:46] couch appeared — 29.3% confidence
+[00:00:46] airplane appeared — 30.6% confidence
+[00:00:46] tv appeared — 26.3% confidence
+[00:00:47] airplane lost from frame
+[00:00:47] couch lost from frame
+[00:00:47] couch appeared — 28.5% confidence
+[00:00:47] tv lost from frame
+[00:00:47] remote appeared — 34.7% confidence
+[00:00:47] bottle lost from frame
+[00:00:47] couch lost from frame
+[00:00:47] remote lost from frame
+[00:00:47] couch appeared — 28.4% confidence
+[00:00:47] airplane appeared — 28.0% confidence
+[00:00:47] airplane lost from frame
+[00:00:47] airplane appeared — 35.8% confidence
+[00:00:48] couch lost from frame
+[00:00:48] couch appeared — 32.9% confidence
+[00:00:48] couch lost from frame
+[00:00:48] couch appeared — 31.2% confidence
+[00:00:48] tv appeared — 30.6% confidence
+[00:00:48] couch lost from frame
+[00:00:49] couch appeared — 38.8% confidence
+[00:00:49] couch lost from frame
+[00:00:49] Frame #480: 3 det — person, tv, airplane (avg 53%)
+[00:00:49] couch appeared — 34.3% confidence
+[00:00:49] airplane lost from frame
+[00:00:49] couch lost from frame
+[00:00:49] tv lost from frame
+[00:00:49] couch appeared — 29.4% confidence
+[00:00:49] airplane appeared — 27.3% confidence
+[00:00:50] tv appeared — 26.1% confidence
+[00:00:50] cup appeared — 37.5% confidence
+[00:00:50] couch lost from frame
+[00:00:50] airplane lost from frame
+[00:00:50] tv lost from frame
+[00:00:50] couch appeared — 37.8% confidence
+[00:00:50] bottle appeared — 30.2% confidence
+[00:00:50] tv appeared — 26.1% confidence
+[00:00:50] cup lost from frame
+[00:00:50] tv lost from frame
+[00:00:51] couch lost from frame
+[00:00:51] couch appeared — 36.9% confidence
+[00:00:51] couch lost from frame
+[00:00:51] couch appeared — 31.9% confidence
+[00:00:51] couch lost from frame
+[00:00:51] couch appeared — 29.5% confidence
+[00:00:51] couch lost from frame
+[00:00:52] airplane appeared — 34.7% confidence
+[00:00:52] couch appeared — 25.6% confidence
+[00:00:52] airplane lost from frame
+[00:00:52] cup appeared — 29.8% confidence
+[00:00:52] couch lost from frame
+[00:00:52] bottle lost from frame
+[00:00:52] cup lost from frame
+[00:00:52] couch appeared — 46.5% confidence
+[00:00:52] Frame #510: 2 det — person, couch (avg 62%)
+[00:00:52] couch lost from frame
+[00:00:53] airplane appeared — 25.1% confidence
+[00:00:53] airplane lost from frame
+[00:00:53] couch appeared — 48.4% confidence
+[00:00:53] couch lost from frame
+[00:00:53] cell phone appeared — 29.1% confidence
+[00:00:53] airplane appeared — 28.1% confidence
+[00:00:54] cell phone lost from frame
+[00:00:54] airplane lost from frame
+[00:00:54] wine glass appeared — 40.2% confidence
+[00:00:54] couch appeared — 31.2% confidence
+[00:00:54] wine glass lost from frame
+[00:00:54] cell phone appeared — 27.4% confidence
+[00:00:54] couch lost from frame
+[00:00:54] Recording stopped

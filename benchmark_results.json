@@ -70,5 +70,123 @@
         "count": 1
       }
     ]
+  },
+  {
+    "id": 3,
+    "version": "V0",
+    "iteration": 1,
+    "tag": "Threshold Optimized",
+    "timestamp": "2026-02-12T20:45:09",
+    "num_images": 2,
+    "total_detections": 8,
+    "avg_detections_per_image": 4.0,
+    "avg_inference_ms": 33.95,
+    "avg_confidence": 0.7666,
+    "unique_classes_detected": 4,
+    "total_classes_available": 80,
+    "class_coverage": 0.05,
+    "fps": 29.5,
+    "quality_score": 0.398,
+    "conf_percentiles": {
+      "p10": 0.58058,
+      "p25": 0.7744249999999999,
+      "p50": 0.83955,
+      "p75": 0.8584,
+      "p90": 0.86011,
+      "std": 0.1507312654196202,
+      "min": 0.4053,
+      "max": 0.8613
+    },
+    "infer_percentiles": {
+      "p50": 33.95,
+      "p95": 37.1,
+      "p99": 37.38,
+      "std": 3.5000000000000018
+    },
+    "per_class_ap": {
+      "person": 0.8421,
+      "bus": 0.8613,
+      "tie": 0.6557,
+      "skateboard": 0.4053
+    },
+    "avg_mask_area_px": 61067.2,
+    "class_distribution": [
+      {
+        "class_id": 0,
+        "class_name": "person",
+        "count": 5
+      },
+      {
+        "class_id": 5,
+        "class_name": "bus",
+        "count": 1
+      },
+      {
+        "class_id": 36,
+        "class_name": "skateboard",
+        "count": 1
+      },
+      {
+        "class_id": 27,
+        "class_name": "tie",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": 4,
+    "version": "V0",
+    "iteration": 2,
+    "tag": "Model Scale-Up",
+    "timestamp": "2026-02-12T20:52:22",
+    "num_images": 2,
+    "total_detections": 8,
+    "avg_detections_per_image": 4.0,
+    "avg_inference_ms": 68.14,
+    "avg_confidence": 0.8433,
+    "unique_classes_detected": 3,
+    "total_classes_available": 80,
+    "class_coverage": 0.0375,
+    "fps": 14.7,
+    "quality_score": 0.3792,
+    "conf_percentiles": {
+      "p10": 0.70596,
+      "p25": 0.839325,
+      "p50": 0.88615,
+      "p75": 0.8996,
+      "p90": 0.91484,
+      "std": 0.09658810421061179,
+      "min": 0.6312,
+      "max": 0.9252
+    },
+    "infer_percentiles": {
+      "p50": 68.14,
+      "p95": 78.14800000000001,
+      "p99": 79.03760000000001,
+      "std": 11.120000000000001
+    },
+    "per_class_ap": {
+      "person": 0.8472,
+      "bus": 0.9252,
+      "tie": 0.738
+    },
+    "avg_mask_area_px": 64171.0,
+    "class_distribution": [
+      {
+        "class_id": 0,
+        "class_name": "person",
+        "count": 6
+      },
+      {
+        "class_id": 5,
+        "class_name": "bus",
+        "count": 1
+      },
+      {
+        "class_id": 27,
+        "class_name": "tie",
+        "count": 1
+      }
+    ]
   }
 ]

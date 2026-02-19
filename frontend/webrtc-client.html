@@ -3,410 +3,930 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OpenDeploy WebRTC Client</title>
+    <title>OpenDeploy Vision — Live Detection</title>
     <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
       body {
         font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
         background: #0b0f1a;
         color: #e6edf3;
-        margin: 0;
-        padding: 24px;
+        padding: 16px;
       }
-      .panel {
-        max-width: 1200px;
-        margin: 0 auto;
-        background: #111827;
-        border: 1px solid #1f2937;
-        border-radius: 12px;
-        padding: 20px;
-        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+      .app { max-width: 1600px; margin: 0 auto; }
+
+      /* ── Header ──────────────────────────────────────── */
+      .header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 16px;
       }
-      h1 {
-        margin-top: 0;
-        font-size: 24px;
+      .header h1 { font-size: 22px; font-weight: 700; }
+      .header .session-timer {
+        font-size: 14px; font-variant-numeric: tabular-nums;
+        color: #9ca3af; background: #111827; border: 1px solid #1f2937;
+        padding: 6px 14px; border-radius: 8px;
       }
-      .row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 16px;
+      .header .session-timer.recording { color: #ef4444; border-color: #dc2626; }
+
+      /* ── Config bar ──────────────────────────────────── */
+      .config-bar {
+        display: flex; flex-wrap: wrap; gap: 10px;
+        background: #111827; border: 1px solid #1f2937; border-radius: 10px;
+        padding: 14px; margin-bottom: 14px; align-items: end;
       }
-      .row-3 {
-        display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
-        gap: 16px;
+      .config-bar .field { flex: 1; min-width: 140px; }
+      .config-bar .field.sm { flex: 0 0 110px; min-width: 90px; }
+      .config-bar label { display: block; font-size: 11px; color: #6b7280; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+      .config-bar input, .config-bar select {
+        width: 100%; border-radius: 6px; border: 1px solid #1f2937;
+        padding: 8px 10px; font-size: 13px; background: #0b1220; color: #e6edf3; box-sizing: border-box;
       }
-      label {
-        display: block;
-        font-size: 12px;
-        color: #9ca3af;
-        margin-bottom: 6px;
+      .btn {
+        padding: 8px 18px; border-radius: 8px; border: 1px solid transparent;
+        font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+        transition: all 0.15s; flex-shrink: 0;
       }
-      input, button, select {
-        width: 100%;
-        border-radius: 8px;
-        border: 1px solid #1f2937;
-        padding: 10px 12px;
-        font-size: 14px;
-        background: #0b1220;
-        color: #e6edf3;
-        box-sizing: border-box;
+      .btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+      .btn-primary:hover { background: #1d4ed8; }
+      .btn-primary:disabled { background: #1e3a5f; border-color: #1e3a5f; cursor: default; opacity: 0.6; }
+      .btn-danger { background: #dc2626; color: #fff; border-color: #dc2626; }
+      .btn-danger:hover { background: #b91c1c; }
+      .btn-danger:disabled { opacity: 0.4; cursor: default; }
+      .btn-secondary { background: #1f2937; color: #9ca3af; border-color: #374151; }
+      .btn-secondary:hover { background: #374151; color: #e6edf3; }
+      .btn-record { background: #111827; color: #9ca3af; border-color: #374151; }
+      .btn-record:disabled { opacity: 0.4; cursor: default; }
+      .btn-record.active { background: #7f1d1d; color: #fca5a5; border-color: #dc2626; animation: pulse-rec 1.5s infinite; }
+      @keyframes pulse-rec { 50% { opacity: 0.7; } }
+
+      /* ── Main layout ─────────────────────────────────── */
+      .main-grid {
+        display: grid; grid-template-columns: 1fr 380px; gap: 14px;
       }
-      button {
-        cursor: pointer;
-        background: #2563eb;
-        border-color: #2563eb;
-        font-weight: 600;
+      @media (max-width: 1100px) { .main-grid { grid-template-columns: 1fr; } }
+
+      /* ── Video panel ─────────────────────────────────── */
+      .video-panel {
+        background: #111827; border: 1px solid #1f2937; border-radius: 10px;
+        padding: 14px; display: flex; flex-direction: column; gap: 10px;
       }
-      button.secondary {
-        background: #0b1220;
-        border-color: #374151;
-      }
-      video, canvas {
-        width: 100%;
-        border-radius: 10px;
-        border: 1px solid #1f2937;
-        background: #0b1220;
-      }
-      .video-container {
-        position: relative;
-        width: 100%;
-      }
-      .video-container video {
-        display: block;
-        width: 100%;
-      }
+      .video-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .video-container { position: relative; width: 100%; border-radius: 8px; overflow: hidden; }
+      .video-container video, .video-container canvas.buf { display: block; width: 100%; border-radius: 8px; border: 1px solid #1f2937; background: #0b1220; }
       .video-container .overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        pointer-events: none;
-        border-radius: 10px;
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        pointer-events: none; border-radius: 8px;
       }
-      .status {
-        margin-top: 12px;
-        font-size: 13px;
-        color: #9ca3af;
+      .record-canvas { display: none; }
+      .vid-label { font-size: 11px; color: #6b7280; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+      /* ── KPI strip ───────────────────────────────────── */
+      .kpi-strip {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(95px, 1fr)); gap: 6px;
       }
-      .detection-stats {
-        display: flex;
-        gap: 16px;
-        margin-top: 12px;
-        font-size: 13px;
-        flex-wrap: wrap;
+      .kpi {
+        background: #0b1220; border: 1px solid #1f2937; border-radius: 8px;
+        padding: 7px 8px; text-align: center;
       }
-      .stat {
-        background: #0b1220;
-        border: 1px solid #1f2937;
-        border-radius: 8px;
-        padding: 8px 14px;
+      .kpi .v { font-size: 17px; font-weight: 700; color: #3b82f6; font-variant-numeric: tabular-nums; line-height: 1.2; }
+      .kpi .l { font-size: 9px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.3px; margin-top: 1px; }
+      .kpi.good .v { color: #10b981; }
+      .kpi.warn .v { color: #f59e0b; }
+      .kpi.bad .v { color: #ef4444; }
+
+      /* ── Right sidebar ───────────────────────────────── */
+      .sidebar { display: flex; flex-direction: column; gap: 10px; }
+      .sidebar-section {
+        background: #111827; border: 1px solid #1f2937; border-radius: 10px;
+        display: flex; flex-direction: column; overflow: hidden;
       }
-      .stat .val {
-        font-size: 20px;
-        font-weight: 700;
-        color: #3b82f6;
+      .sec-head {
+        font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase;
+        letter-spacing: 0.6px; padding: 10px 12px 6px; display: flex; align-items: center; justify-content: space-between;
       }
-      .stat .lbl {
-        color: #9ca3af;
-        font-size: 11px;
+      .sec-head .badge {
+        background: #1f2937; color: #9ca3af; font-size: 10px; font-weight: 600;
+        padding: 2px 7px; border-radius: 10px;
       }
-      .metrics {
-        white-space: pre-wrap;
-        background: #0b1220;
-        border: 1px solid #1f2937;
-        padding: 12px;
-        border-radius: 10px;
-        margin-top: 12px;
-        max-height: 200px;
-        overflow-y: auto;
-        font-size: 12px;
+
+      /* ── Class breakdown ─────────────────────────────── */
+      .class-list { padding: 4px 12px 10px; max-height: 190px; overflow-y: auto; }
+      .class-row {
+        display: flex; align-items: center; gap: 6px; padding: 3px 0;
+        font-size: 12px; border-bottom: 1px solid #1f293718;
       }
-      .hidden { display: none; }
+      .class-row .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+      .class-row .name { flex: 1; color: #d1d5db; }
+      .class-row .cnt { color: #9ca3af; font-variant-numeric: tabular-nums; font-weight: 600; min-width: 28px; text-align: right; }
+      .class-row .conf { color: #6b7280; font-size: 11px; font-variant-numeric: tabular-nums; min-width: 36px; text-align: right; }
+      .class-row .bar-wrap { width: 50px; height: 4px; background: #1f2937; border-radius: 2px; flex-shrink: 0; }
+      .class-row .bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+
+      /* ── Event log ───────────────────────────────────── */
+      .event-log { padding: 4px 12px 10px; max-height: 260px; overflow-y: auto; font-size: 11px; }
+      .log-entry { padding: 3px 0; border-bottom: 1px solid #1f293718; display: flex; gap: 6px; }
+      .log-entry .ts { color: #4b5563; font-variant-numeric: tabular-nums; flex-shrink: 0; width: 54px; }
+      .log-entry .ev { color: #9ca3af; flex: 1; word-break: break-word; }
+      .log-entry .ev .hi { color: #60a5fa; font-weight: 600; }
+      .log-entry .ev .det { color: #34d399; }
+      .log-entry .ev .gone { color: #f87171; }
+
+      /* ── Recordings panel ────────────────────────────── */
+      .rec-list { padding: 4px 12px 10px; max-height: 220px; overflow-y: auto; }
+      .rec-item {
+        display: flex; align-items: center; gap: 8px; padding: 6px 0;
+        border-bottom: 1px solid #1f293718; font-size: 12px;
+      }
+      .rec-item .rec-info { flex: 1; min-width: 0; }
+      .rec-item .rec-name { color: #d1d5db; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .rec-item .rec-meta { color: #6b7280; font-size: 10px; margin-top: 1px; }
+      .rec-item .btn { padding: 4px 10px; font-size: 11px; }
+      .rec-empty { padding: 14px; color: #374151; font-size: 12px; text-align: center; }
+
+      /* ── Video player modal ──────────────────────── */
+      .player-modal {
+        display: none; position: fixed; inset: 0; z-index: 1000;
+        background: rgba(0,0,0,0.85); align-items: center; justify-content: center;
+        flex-direction: column; gap: 12px;
+      }
+      .player-modal.open { display: flex; }
+      .player-modal video {
+        max-width: 90vw; max-height: 75vh; border-radius: 10px;
+        border: 1px solid #374151; background: #000;
+      }
+      .player-bar {
+        display: flex; align-items: center; gap: 12px;
+        background: #111827; border: 1px solid #1f2937; border-radius: 10px;
+        padding: 10px 18px;
+      }
+      .player-bar .player-name { color: #d1d5db; font-size: 14px; font-weight: 600; }
+      .player-bar .player-meta { color: #6b7280; font-size: 11px; margin-left: 4px; }
+      .btn-play { background: #1d4ed8; color: #fff; border-color: #2563eb; padding: 4px 8px; font-size: 11px; min-width: 28px; }
+      .btn-play:hover { background: #2563eb; }
+
+      /* ── Status bar ──────────────────────────────────── */
+      .status-bar {
+        margin-top: 10px; font-size: 12px; color: #4b5563;
+        display: flex; align-items: center; gap: 10px;
+      }
+      .dot-live { width: 6px; height: 6px; border-radius: 50%; background: #6b7280; flex-shrink: 0; }
+      .dot-live.on { background: #10b981; animation: pulse-dot 1.5s infinite; }
+      @keyframes pulse-dot { 50% { opacity: 0.4; } }
+
+      /* ── Scrollbar ───────────────────────────────────── */
+      ::-webkit-scrollbar { width: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
     </style>
   </head>
   <body>
-    <div class="panel">
-      <h1>OpenDeploy Vision — Live Detection</h1>
-      <p>Live camera feed → YOLOv8-seg detection + instance segmentation. Direct mode (no WebRTC gateway required).</p>
+    <div class="app">
+      <!-- Header -->
+      <div class="header">
+        <h1>OpenDeploy Vision — Live Detection</h1>
+        <div class="session-timer" id="sessionTimer">00:00:00</div>
+      </div>
 
-      <div class="row">
-        <div>
+      <!-- Config bar -->
+      <div class="config-bar">
+        <div class="field">
           <label for="api">API URL</label>
           <input id="api" value="" />
         </div>
-        <div>
-          <label for="mode">Mode</label>
-          <select id="mode">
-            <option value="direct" selected>Direct (Local — no gateway needed)</option>
-            <option value="webrtc">WebRTC (requires gateway + SHM)</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="row" id="gatewayRow" style="margin-top: 12px; display: none;">
-        <div>
-          <label for="gateway">WebRTC Gateway URL</label>
-          <input id="gateway" value="" />
-        </div>
-        <div>
-          <label for="apiKey">API Key</label>
-          <input id="apiKey" placeholder="Enter API key" />
-        </div>
-      </div>
-
-      <div class="row-3" style="margin-top: 12px;">
-        <div>
+        <div class="field">
           <label for="model">Model</label>
           <select id="model">
-            <option value="yolov8-seg" selected>YOLOv8-seg (Detection + Segmentation)</option>
+            <option value="yolov8-seg" selected>YOLOv8-seg (Det + Seg)</option>
             <option value="diabetic-retinopathy-glaucoma-detector">Eye Scanner (ResNet-18)</option>
           </select>
         </div>
-        <div>
-          <label for="interval">Frame Interval (ms)</label>
+        <div class="field sm">
+          <label for="interval">Interval (ms)</label>
           <input id="interval" value="100" type="number" min="10" />
         </div>
+        <button class="btn btn-primary" id="startBtn">&#9654; Start</button>
+        <button class="btn btn-danger" id="stopBtn" disabled>&#9632; Stop</button>
+        <button class="btn btn-record" id="recordBtn" disabled title="Record session with overlay">&#9679; Record</button>
       </div>
 
-      <div class="row" style="margin-top: 12px;">
-        <div>
-          <button id="start">Start Stream</button>
-        </div>
-        <div>
-          <button id="stop" class="secondary">Stop</button>
-        </div>
-      </div>
+      <!-- Main layout -->
+      <div class="main-grid">
+        <!-- Left: video + KPIs -->
+        <div class="video-panel">
+          <div class="video-row">
+            <div>
+              <div class="vid-label">Live Detection View</div>
+              <div class="video-container" id="videoContainer">
+                <video id="preview" autoplay playsinline muted></video>
+                <canvas id="overlay" class="overlay"></canvas>
+              </div>
+            </div>
+            <div>
+              <div class="vid-label">Capture Buffer</div>
+              <canvas id="buffer" class="buf" width="640" height="480"></canvas>
+            </div>
+          </div>
+          <!-- Hidden composite canvas for recording -->
+          <canvas id="recordCanvas" class="record-canvas" width="640" height="480"></canvas>
 
-      <div class="row" style="margin-top: 16px;">
-        <div>
-          <label>Live Detection View</label>
-          <div class="video-container">
-            <video id="preview" autoplay playsinline muted></video>
-            <canvas id="overlay" class="overlay"></canvas>
+          <!-- KPI strip -->
+          <div class="kpi-strip">
+            <div class="kpi"><div class="v" id="kDetections">0</div><div class="l">Detections</div></div>
+            <div class="kpi"><div class="v" id="kInferMs">--</div><div class="l">Inference</div></div>
+            <div class="kpi"><div class="v" id="kFPS">--</div><div class="l">FPS</div></div>
+            <div class="kpi"><div class="v" id="kAvgConf">--</div><div class="l">Avg Conf</div></div>
+            <div class="kpi"><div class="v" id="kAvgInfer">--</div><div class="l">Avg Infer</div></div>
+            <div class="kpi"><div class="v" id="kDetRate">--</div><div class="l">Det/sec</div></div>
+            <div class="kpi"><div class="v" id="kUnique">0</div><div class="l">Classes</div></div>
+            <div class="kpi"><div class="v" id="kTotalDet">0</div><div class="l">Total Det</div></div>
+            <div class="kpi"><div class="v" id="kP95Infer">--</div><div class="l">P95 Infer</div></div>
+            <div class="kpi"><div class="v" id="kStability">--</div><div class="l">Stability</div></div>
           </div>
         </div>
-        <div>
-          <label>Capture Buffer (sent to inference)</label>
-          <canvas id="buffer" width="640" height="480"></canvas>
+
+        <!-- Right sidebar -->
+        <div class="sidebar">
+          <!-- Class breakdown -->
+          <div class="sidebar-section">
+            <div class="sec-head">
+              Live Class Breakdown
+              <span class="badge" id="classCount">0</span>
+            </div>
+            <div class="class-list" id="classList"></div>
+          </div>
+
+          <!-- Event log -->
+          <div class="sidebar-section" style="flex:1;">
+            <div class="sec-head">
+              Detection Log
+              <span class="badge" id="logCount">0</span>
+            </div>
+            <div class="event-log" id="eventLog"></div>
+          </div>
+
+          <!-- Recordings -->
+          <div class="sidebar-section">
+            <div class="sec-head">
+              Recordings
+              <span class="badge" id="recCount">0</span>
+            </div>
+            <div class="rec-list" id="recList">
+              <div class="rec-empty">No recordings yet. Start a stream and click Record.</div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="detection-stats" id="detectionStats">
-        <div class="stat"><div class="val" id="statCount">0</div><div class="lbl">Detections</div></div>
-        <div class="stat"><div class="val" id="statInfer">--</div><div class="lbl">Inference (ms)</div></div>
-        <div class="stat"><div class="val" id="statFPS">--</div><div class="lbl">FPS</div></div>
-        <div class="stat"><div class="val" id="statModel">--</div><div class="lbl">Model</div></div>
+      <!-- Video player modal -->
+      <div class="player-modal" id="playerModal">
+        <video id="playerVideo" controls></video>
+        <div class="player-bar">
+          <span class="player-name" id="playerName"></span>
+          <span class="player-meta" id="playerMeta"></span>
+          <div style="flex:1"></div>
+          <button class="btn btn-secondary" onclick="closePlayer()">✕ Close</button>
+        </div>
       </div>
 
-      <div class="status" id="status">Idle.</div>
-      <div class="metrics" id="metrics"></div>
+      <!-- Status bar -->
+      <div class="status-bar">
+        <div class="dot-live" id="statusDot"></div>
+        <span id="statusText">Idle — configure and start a stream.</span>
+      </div>
     </div>
 
     <script>
-      const startButton = document.getElementById("start");
-      const stopButton = document.getElementById("stop");
-      const statusEl = document.getElementById("status");
-      const metricsEl = document.getElementById("metrics");
-      const preview = document.getElementById("preview");
-      const canvas = document.getElementById("buffer");
-      const ctx = canvas.getContext("2d");
-      const overlayCanvas = document.getElementById("overlay");
-      const overlayCtx = overlayCanvas.getContext("2d");
-      const gatewayInput = document.getElementById("gateway");
-      const apiInput = document.getElementById("api");
-      const modeSelect = document.getElementById("mode");
+      // ═══════════════════════════════════════════════════════════════
+      //  DOM
+      // ═══════════════════════════════════════════════════════════════
+      const $ = (id) => document.getElementById(id);
+      const preview      = $("preview");
+      const canvas       = $("buffer");
+      const ctx          = canvas.getContext("2d");
+      const overlayCanvas = $("overlay");
+      const overlayCtx   = overlayCanvas.getContext("2d");
+      const recordCanvas = $("recordCanvas");
+      const recordCtx    = recordCanvas.getContext("2d");
+      const apiInput     = $("api");
+      const startBtn     = $("startBtn");
+      const stopBtn      = $("stopBtn");
+      const recordBtn    = $("recordBtn");
+      const sessionTimerEl = $("sessionTimer");
 
-      let peerConnection;
-      let dataChannel;
-      let stream;
-      let timer;
-      let frameCount = 0;
-      let fpsStart = performance.now();
+      // ═══════════════════════════════════════════════════════════════
+      //  State
+      // ═══════════════════════════════════════════════════════════════
+      let stream = null, timer = null, inferInFlight = false;
+      let sessionStart = null, sessionTimerIv = null;
 
-      // Show/hide gateway row based on mode
-      modeSelect.addEventListener("change", () => {
-        document.getElementById("gatewayRow").style.display =
-          modeSelect.value === "webrtc" ? "grid" : "none";
-      });
+      // Rolling metrics
+      let frameCount = 0, fpsStart = 0;
+      let totalDetections = 0;
+      let totalInferMs = 0, inferCount = 0;
+      let inferHistory = [];           // last N inference times for P95
+      const INFER_WINDOW = 100;
+      let totalConf = 0, confCount = 0;
+      let uniqueClasses = new Set();
+      let classCounts = {};            // classId → { name, count, totalConf }
+      let prevDetClasses = null;       // for temporal stability
+      let stabilityHistory = [];       // last N stability samples
+      const STABILITY_WINDOW = 30;
 
-      // Per-class colors (deterministic, high contrast)
-      const CLASS_COLORS = [
-        "#FF3838", "#FF9D97", "#FF701F", "#FFB21D", "#CFD231",
-        "#48F90A", "#92CC17", "#3DDB86", "#1A9334", "#00D4BB",
-        "#2C99A8", "#00C2FF", "#344593", "#6473FF", "#0018EC",
-        "#8438FF", "#520085", "#CB38FF", "#FF95C8", "#FF37C7",
+      // Event log
+      let logEntries = [];
+      const MAX_LOG = 500;
+
+      // Recording state
+      let mediaRecorder = null, recordedChunks = [], isRecording = false;
+      let recordStart = null, compositeIv = null;
+      let recordings = [];             // saved recordings
+      let recDetCount = 0;             // detections during this recording
+      let currentModelInfo = { arch: '', version: '', serving: '' }; // from inference response
+
+      // ═══════════════════════════════════════════════════════════════
+      //  Colors
+      // ═══════════════════════════════════════════════════════════════
+      const COLORS = [
+        "#FF3838","#FF9D97","#FF701F","#FFB21D","#CFD231",
+        "#48F90A","#92CC17","#3DDB86","#1A9334","#00D4BB",
+        "#2C99A8","#00C2FF","#344593","#6473FF","#0018EC",
+        "#8438FF","#520085","#CB38FF","#FF95C8","#FF37C7",
       ];
+      const getColor = (id) => COLORS[id % COLORS.length];
+      const hexRGBA = (hex, a) =>
+        `rgba(${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)},${a})`;
 
-      function getColor(classId) {
-        return CLASS_COLORS[classId % CLASS_COLORS.length];
+      // ═══════════════════════════════════════════════════════════════
+      //  Init
+      // ═══════════════════════════════════════════════════════════════
+      if (!apiInput.value) apiInput.value = window.location.origin;
+
+      function setStatus(text, live = false) {
+        $("statusText").textContent = text;
+        $("statusDot").className = "dot-live" + (live ? " on" : "");
       }
-
-      function hexToRGBA(hex, alpha) {
-        const r = parseInt(hex.slice(1, 3), 16);
-        const g = parseInt(hex.slice(3, 5), 16);
-        const b = parseInt(hex.slice(5, 7), 16);
-        return `rgba(${r},${g},${b},${alpha})`;
+      function fmtDur(ms) {
+        const s = Math.floor(ms / 1000);
+        return [Math.floor(s/3600), Math.floor((s%3600)/60), s%60]
+          .map(v => String(v).padStart(2,"0")).join(":");
       }
+      function elapsed() { return sessionStart ? performance.now() - sessionStart : 0; }
+      function ts() { return fmtDur(elapsed()); }
 
-      if (!gatewayInput.value) {
-        gatewayInput.value = `${window.location.origin}/webrtc`;
+      // ═══════════════════════════════════════════════════════════════
+      //  Overlay drawing
+      // ═══════════════════════════════════════════════════════════════
+      function syncOverlay() {
+        const r = preview.getBoundingClientRect();
+        overlayCanvas.width = r.width;
+        overlayCanvas.height = r.height;
       }
-      // Auto-detect API URL from current page origin
-      if (!apiInput.value) {
-        apiInput.value = window.location.origin;
-      }
+      preview.addEventListener("loadedmetadata", syncOverlay);
+      window.addEventListener("resize", syncOverlay);
 
-      function setStatus(text) {
-        statusEl.textContent = text;
-      }
-
-      function setMetrics(data) {
-        metricsEl.textContent = data ? JSON.stringify(data, null, 2) : "";
-      }
-
-      // Sync overlay canvas size to video element
-      function syncOverlaySize() {
-        const rect = preview.getBoundingClientRect();
-        overlayCanvas.width = rect.width;
-        overlayCanvas.height = rect.height;
-      }
-
-      preview.addEventListener("loadedmetadata", syncOverlaySize);
-      window.addEventListener("resize", syncOverlaySize);
-
-      // ── Drawing functions ─────────────────────────────────────────
-
-      function drawDetections(detections, imgWidth, imgHeight) {
-        syncOverlaySize();
-        const cw = overlayCanvas.width;
-        const ch = overlayCanvas.height;
-        const sx = cw / imgWidth;
-        const sy = ch / imgHeight;
-
+      function drawDetections(dets, imgW, imgH) {
+        syncOverlay();
+        const cw = overlayCanvas.width, ch = overlayCanvas.height;
+        const sx = cw/imgW, sy = ch/imgH;
         overlayCtx.clearRect(0, 0, cw, ch);
 
-        for (const det of detections) {
-          const color = getColor(det.class_id);
-          const { x1, y1, x2, y2 } = det.bbox;
-          const bx = x1 * sx, by = y1 * sy;
-          const bw = (x2 - x1) * sx, bh = (y2 - y1) * sy;
+        for (const d of dets) {
+          const c = getColor(d.class_id);
+          const {x1,y1,x2,y2} = d.bbox;
+          const bx=x1*sx, by=y1*sy, bw=(x2-x1)*sx, bh=(y2-y1)*sy;
 
-          // Draw segmentation mask polygon (semi-transparent fill)
-          if (det.mask_polygon && det.mask_polygon.length > 2) {
+          // Segmentation mask
+          if (d.mask_polygon && d.mask_polygon.length > 2) {
             overlayCtx.beginPath();
-            overlayCtx.moveTo(det.mask_polygon[0][0] * sx, det.mask_polygon[0][1] * sy);
-            for (let i = 1; i < det.mask_polygon.length; i++) {
-              overlayCtx.lineTo(det.mask_polygon[i][0] * sx, det.mask_polygon[i][1] * sy);
-            }
+            overlayCtx.moveTo(d.mask_polygon[0][0]*sx, d.mask_polygon[0][1]*sy);
+            for (let i=1; i<d.mask_polygon.length; i++)
+              overlayCtx.lineTo(d.mask_polygon[i][0]*sx, d.mask_polygon[i][1]*sy);
             overlayCtx.closePath();
-            overlayCtx.fillStyle = hexToRGBA(color, 0.25);
+            overlayCtx.fillStyle = hexRGBA(c, 0.25);
             overlayCtx.fill();
-            overlayCtx.strokeStyle = hexToRGBA(color, 0.6);
+            overlayCtx.strokeStyle = hexRGBA(c, 0.6);
             overlayCtx.lineWidth = 1;
             overlayCtx.stroke();
           }
 
-          // Draw bounding box
-          overlayCtx.strokeStyle = color;
+          // Box
+          overlayCtx.strokeStyle = c;
           overlayCtx.lineWidth = 2;
           overlayCtx.strokeRect(bx, by, bw, bh);
 
-          // Draw label background
-          const label = `${det.class_name} ${(det.confidence * 100).toFixed(1)}%`;
-          overlayCtx.font = "bold 13px system-ui, sans-serif";
-          const textMetrics = overlayCtx.measureText(label);
-          const labelH = 20;
-          const labelW = textMetrics.width + 10;
-
-          overlayCtx.fillStyle = color;
-          overlayCtx.fillRect(bx, by - labelH, labelW, labelH);
-
-          // Draw label text
-          overlayCtx.fillStyle = "#ffffff";
-          overlayCtx.fillText(label, bx + 5, by - 5);
+          // Label
+          const lbl = `${d.class_name} ${(d.confidence*100).toFixed(1)}%`;
+          overlayCtx.font = "bold 12px system-ui, sans-serif";
+          const tw = overlayCtx.measureText(lbl).width + 8;
+          overlayCtx.fillStyle = c;
+          overlayCtx.fillRect(bx, by-18, tw, 18);
+          overlayCtx.fillStyle = "#fff";
+          overlayCtx.fillText(lbl, bx+4, by-4);
         }
       }
 
-      function updateStats(data) {
-        const count = data.detection_count ?? data.detections?.length ?? 0;
-        const inferMs = data.inference_ms ?? data.metrics?.compute_ms ?? "--";
-        const model = data.model ?? "--";
+      // ═══════════════════════════════════════════════════════════════
+      //  Metrics engine
+      // ═══════════════════════════════════════════════════════════════
+      function updateMetrics(data) {
+        const dets = data.detections || [];
+        const count = data.detection_count ?? dets.length;
+        const inferMs = data.inference_ms ?? null;
+
+        // Track which model produced these results
+        if (data.model) currentModelInfo.arch = data.model;
+        if (data.version) currentModelInfo.version = data.version;
+        if (data.serving) currentModelInfo.serving = data.serving;
 
         frameCount++;
-        const elapsed = (performance.now() - fpsStart) / 1000;
-        const fps = elapsed > 0 ? (frameCount / elapsed).toFixed(1) : "--";
+        totalDetections += count;
+        if (isRecording) recDetCount += count;
 
-        document.getElementById("statCount").textContent = count;
-        document.getElementById("statInfer").textContent =
-          typeof inferMs === "number" ? inferMs.toFixed(1) : inferMs;
-        document.getElementById("statFPS").textContent = fps;
-        document.getElementById("statModel").textContent = model;
+        // Inference tracking
+        if (inferMs != null) {
+          totalInferMs += inferMs;
+          inferCount++;
+          inferHistory.push(inferMs);
+          if (inferHistory.length > INFER_WINDOW) inferHistory.shift();
+        }
+
+        // Confidence + class tracking
+        for (const d of dets) {
+          uniqueClasses.add(d.class_id);
+          totalConf += d.confidence;
+          confCount++;
+          if (!classCounts[d.class_id])
+            classCounts[d.class_id] = { name: d.class_name, count: 0, totalConf: 0 };
+          classCounts[d.class_id].count++;
+          classCounts[d.class_id].totalConf += d.confidence;
+        }
+
+        // Temporal stability (class-set Jaccard)
+        const curSet = new Set(dets.map(d => d.class_id));
+        if (prevDetClasses && (curSet.size > 0 || prevDetClasses.size > 0)) {
+          const inter = [...curSet].filter(c => prevDetClasses.has(c)).length;
+          const union = new Set([...prevDetClasses, ...curSet]).size;
+          const s = union > 0 ? inter/union*100 : 100;
+          stabilityHistory.push(s);
+          if (stabilityHistory.length > STABILITY_WINDOW) stabilityHistory.shift();
+        }
+        prevDetClasses = curSet;
+
+        // Compute display values
+        const elSec = (performance.now() - fpsStart) / 1000;
+        const fps = elSec > 0 ? (frameCount/elSec).toFixed(1) : "--";
+        const avgInfer = inferCount > 0 ? (totalInferMs/inferCount).toFixed(1) : "--";
+        const avgConf = confCount > 0 ? (totalConf/confCount*100).toFixed(1)+"%" : "--";
+        const detRate = elSec > 0 ? (totalDetections/elSec).toFixed(1) : "--";
+        const stability = stabilityHistory.length > 0
+          ? (stabilityHistory.reduce((a,b)=>a+b,0)/stabilityHistory.length).toFixed(0)+"%"
+          : "--";
+
+        // P95 inference
+        let p95 = "--";
+        if (inferHistory.length >= 5) {
+          const sorted = [...inferHistory].sort((a,b) => a-b);
+          p95 = sorted[Math.floor(sorted.length * 0.95)].toFixed(1) + "ms";
+        }
+
+        // Update KPIs
+        $("kDetections").textContent = count;
+        $("kInferMs").textContent = inferMs != null ? inferMs.toFixed(1)+"ms" : "--";
+        $("kFPS").textContent = fps;
+        $("kAvgConf").textContent = avgConf;
+        $("kAvgInfer").textContent = avgInfer !== "--" ? avgInfer+"ms" : "--";
+        $("kDetRate").textContent = detRate;
+        $("kUnique").textContent = uniqueClasses.size;
+        $("kTotalDet").textContent = totalDetections;
+        $("kP95Infer").textContent = p95;
+        $("kStability").textContent = stability;
+
+        // Color coding
+        colorKPI("kAvgConf", confCount>0 ? totalConf/confCount*100 : null, 70, 50);
+        colorKPI("kStability", stabilityHistory.length>0 ? stabilityHistory.reduce((a,b)=>a+b,0)/stabilityHistory.length : null, 70, 40);
+        colorKPI("kFPS", parseFloat(fps), 8, 4);
+        colorKPI("kP95Infer", inferHistory.length>=5 ? -parseFloat(p95) : null, -50, -100); // inverted — lower is better
+
+        updateClassBreakdown();
+        updateEventLog(dets);
       }
 
-      // ── Direct Mode (no WebRTC / no SHM — works on Windows) ──────
+      function colorKPI(id, val, good, warn) {
+        const el = $(id).parentElement;
+        el.className = "kpi";
+        if (val == null || isNaN(val)) return;
+        if (val >= good) el.className = "kpi good";
+        else if (val >= warn) el.className = "kpi warn";
+        else el.className = "kpi bad";
+      }
 
+      // ═══════════════════════════════════════════════════════════════
+      //  Class breakdown
+      // ═══════════════════════════════════════════════════════════════
+      function updateClassBreakdown() {
+        const sorted = Object.entries(classCounts)
+          .map(([id,d]) => ({ id:+id, ...d, avg: d.totalConf/d.count }))
+          .sort((a,b) => b.count - a.count);
+        $("classCount").textContent = sorted.length;
+        const max = sorted.length > 0 ? sorted[0].count : 1;
+        $("classList").innerHTML = sorted.map(c => `
+          <div class="class-row">
+            <div class="dot" style="background:${getColor(c.id)}"></div>
+            <div class="name">${c.name}</div>
+            <div class="cnt">${c.count}</div>
+            <div class="conf">${(c.avg*100).toFixed(0)}%</div>
+            <div class="bar-wrap"><div class="bar-fill" style="width:${(c.count/max*100).toFixed(0)}%;background:${getColor(c.id)}"></div></div>
+          </div>`).join("");
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      //  Event log
+      // ═══════════════════════════════════════════════════════════════
+      let lastLogClasses = new Set();
+      let logFrameN = 0;
+
+      function updateEventLog(dets) {
+        logFrameN++;
+        const t = ts();
+        const curNames = new Set(dets.map(d => d.class_name));
+
+        // New appearances
+        for (const d of dets) {
+          if (!lastLogClasses.has(d.class_name)) {
+            addLog(t, `<span class="det">${d.class_name}</span> appeared — ${(d.confidence*100).toFixed(1)}% confidence`);
+          }
+        }
+        // Disappearances
+        for (const n of lastLogClasses) {
+          if (!curNames.has(n)) addLog(t, `<span class="gone">${n}</span> lost from frame`);
+        }
+
+        // Periodic summary every ~3s (30 frames at 10fps)
+        if (logFrameN % 30 === 0 && dets.length > 0) {
+          const names = [...new Set(dets.map(d => d.class_name))].join(", ");
+          const ac = dets.reduce((s,d) => s+d.confidence, 0) / dets.length;
+          addLog(t, `Frame #${frameCount}: <span class="hi">${dets.length}</span> det — ${names} (avg ${(ac*100).toFixed(0)}%)`);
+        }
+
+        // High confidence alert
+        for (const d of dets) {
+          if (d.confidence >= 0.95 && !lastLogClasses.has(d.class_name)) {
+            addLog(t, `<span class="hi">HIGH CONF</span> ${d.class_name} at ${(d.confidence*100).toFixed(1)}%`);
+          }
+        }
+
+        lastLogClasses = curNames;
+      }
+
+      function addLog(t, html) {
+        logEntries.push({ ts: t, html });
+        if (logEntries.length > MAX_LOG) logEntries.shift();
+        $("logCount").textContent = logEntries.length;
+
+        const el = document.createElement("div");
+        el.className = "log-entry";
+        el.innerHTML = `<span class="ts">${t}</span><span class="ev">${html}</span>`;
+        const container = $("eventLog");
+        container.appendChild(el);
+        // Auto-scroll
+        container.scrollTop = container.scrollHeight;
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      //  Recording
+      // ═══════════════════════════════════════════════════════════════
+      function startRecording() {
+        if (isRecording || !stream) return;
+
+        recordCanvas.width = canvas.width;
+        recordCanvas.height = canvas.height;
+
+        // Composite: video + overlay at 30fps
+        compositeIv = setInterval(() => {
+          recordCtx.drawImage(preview, 0, 0, recordCanvas.width, recordCanvas.height);
+          recordCtx.drawImage(overlayCanvas, 0, 0, recordCanvas.width, recordCanvas.height);
+
+          // Burn in timestamp + detection count
+          recordCtx.fillStyle = "rgba(0,0,0,0.5)";
+          recordCtx.fillRect(0, 0, 220, 24);
+          recordCtx.fillStyle = "#fff";
+          recordCtx.font = "bold 12px system-ui";
+          const dur = fmtDur(performance.now() - recordStart);
+          recordCtx.fillText(`REC ${dur}  |  ${$("kDetections").textContent} det  |  ${$("kFPS").textContent} fps`, 8, 16);
+        }, 1000/30);
+
+        const compStream = recordCanvas.captureStream(30);
+        const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+          ? "video/webm;codecs=vp9" : "video/webm";
+        mediaRecorder = new MediaRecorder(compStream, { mimeType, videoBitsPerSecond: 2_500_000 });
+
+        recordedChunks = [];
+        recDetCount = 0;
+        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+        mediaRecorder.onstop = () => finalizeRecording();
+
+        mediaRecorder.start(1000);
+        isRecording = true;
+        recordStart = performance.now();
+        recordBtn.classList.add("active");
+        recordBtn.innerHTML = "&#9679; REC";
+        sessionTimerEl.classList.add("recording");
+
+        addLog(ts(), '<span class="hi">Recording started</span>');
+        setStatus("Recording — video + overlay being captured", true);
+      }
+
+      function stopRecording() {
+        if (!isRecording) return;
+        if (compositeIv) { clearInterval(compositeIv); compositeIv = null; }
+        if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+        isRecording = false;
+        recordBtn.classList.remove("active");
+        recordBtn.innerHTML = "&#9679; Record";
+        sessionTimerEl.classList.remove("recording");
+        addLog(ts(), '<span class="hi">Recording stopped</span>');
+      }
+
+      function finalizeRecording() {
+        const blob = new Blob(recordedChunks, { type: "video/webm" });
+        const url = URL.createObjectURL(blob);
+        const duration = recordStart ? performance.now() - recordStart : 0;
+        const name = `rec_${new Date().toISOString().slice(0,19).replace(/[T:]/g,"-")}`;
+
+        const recObj = {
+          url, blob, name, duration,
+          detections: recDetCount,
+          classes: uniqueClasses.size,
+          avgConf: confCount > 0 ? (totalConf/confCount*100).toFixed(1) : "--",
+          avgInfer: inferCount > 0 ? (totalInferMs/inferCount).toFixed(1) : "--",
+          frames: frameCount,
+          modelArch: currentModelInfo.arch || $("model").value,
+          modelVersion: currentModelInfo.version || "",
+          log: logEntries.map(e => ({ ...e })),
+          serverStatus: "uploading",  // "uploading" | "saved" | "error"
+          serverId: null,
+        };
+        recordings.push(recObj);
+        updateRecList();
+        setStatus(`Recording saved locally — uploading to server...`, true);
+
+        // Auto-upload to server
+        uploadRecording(recObj, recordings.length - 1);
+      }
+
+      async function uploadRecording(rec, index) {
+        const apiUrl = apiInput.value.replace(/\/$/, "");
+        try {
+          // Build log text
+          const logLines = [
+            "OpenDeploy Detection Session Log",
+            `Recording: ${rec.name}`,
+            `Duration:  ${fmtDur(rec.duration)}`,
+            `Frames:    ${rec.frames}`,
+            `Detections:${rec.detections}`,
+            `Classes:   ${rec.classes}`,
+            `Avg Conf:  ${rec.avgConf}%`,
+            `Avg Infer: ${rec.avgInfer}ms`,
+            "",
+            "─── Event Log ───",
+            ...rec.log.map(e => `[${e.ts}] ${e.html.replace(/<[^>]*>/g, "")}`),
+          ];
+          const logBlob = new Blob([logLines.join("\n")], { type: "text/plain" });
+
+          const fd = new FormData();
+          fd.append("video", rec.blob, rec.name + ".webm");
+          fd.append("log", logBlob, rec.name + "_log.txt");
+          fd.append("name", rec.name);
+          fd.append("duration_ms", Math.round(rec.duration));
+          fd.append("total_frames", rec.frames);
+          fd.append("total_detections", rec.detections);
+          fd.append("unique_classes", rec.classes);
+          fd.append("avg_confidence", rec.avgConf === "--" ? 0 : parseFloat(rec.avgConf) / 100);
+          fd.append("avg_inference_ms", rec.avgInfer === "--" ? 0 : parseFloat(rec.avgInfer));
+          fd.append("model", $("model").value);
+          fd.append("classes_seen", JSON.stringify([...uniqueClasses].map(id => classCounts[id]?.name || `class_${id}`)));
+          fd.append("model_arch", rec.modelArch || $("model").value);
+          fd.append("model_version", rec.modelVersion || "");
+          fd.append("conf_threshold", "0.30");
+          fd.append("iou_threshold", "0.40");
+
+          const resp = await fetch(`${apiUrl}/recordings/upload`, { method: "POST", body: fd });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const data = await resp.json();
+
+          rec.serverStatus = "saved";
+          rec.serverId = data.id;
+          addLog(ts(), `<span class="hi">Uploaded</span> ${rec.name} to server (id=${data.id}, ${(data.video_size/1024).toFixed(0)}KB)`);
+          setStatus(`Recording saved to server — ${rec.name}`, true);
+        } catch (err) {
+          rec.serverStatus = "error";
+          addLog(ts(), `<span class="gone">Upload failed</span> for ${rec.name}: ${err.message}`);
+          setStatus(`Upload failed — ${err.message}. Recording still available locally.`);
+        }
+        updateRecList();
+      }
+
+      function updateRecList() {
+        const all = [...recordings, ...serverRecordings];
+        $("recCount").textContent = all.length;
+        if (all.length === 0) {
+          $("recList").innerHTML = '<div class="rec-empty">No recordings yet. Start a stream and click Record.</div>';
+          return;
+        }
+        $("recList").innerHTML = recordings.map((r,i) => {
+          const statusBadge = r.serverStatus === "saved"
+            ? '<span style="color:#10b981;font-size:10px">✓ saved</span>'
+            : r.serverStatus === "uploading"
+            ? '<span style="color:#f59e0b;font-size:10px">↑ uploading…</span>'
+            : '<span style="color:#ef4444;font-size:10px">✗ local only</span>';
+          return `
+            <div class="rec-item">
+              <div class="rec-info">
+                <div class="rec-name">#${i+1} ${r.name} ${statusBadge}</div>
+                <div class="rec-meta">${fmtDur(r.duration)} · ${r.detections} det · ${r.classes} cls · avg ${r.avgConf}% · ${r.avgInfer}ms infer</div>
+              </div>
+              <button class="btn btn-play" onclick="playRec(${i})">▶</button>
+              <button class="btn btn-secondary" onclick="dlRec(${i})">↓</button>
+              <button class="btn btn-secondary" onclick="dlLog(${i})">📋</button>
+            </div>`;
+        }).join("") + serverRecordings.map((r) => {
+          const dur = r.duration_ms ? fmtDur(r.duration_ms) : "--";
+          const conf = r.avg_confidence != null ? (r.avg_confidence * 100).toFixed(1) : "--";
+          const infer = r.avg_inference_ms != null ? r.avg_inference_ms.toFixed(1) : "--";
+          const modelBadge = r.model_arch ? ` <span style="color:${r.model_arch.includes('yolov8s') ? '#f59e0b' : '#60a5fa'};font-size:10px;background:rgba(96,165,250,0.1);padding:1px 5px;border-radius:8px">${r.model_arch}</span>` : '';
+          const verBadge = r.model_version ? ` <span style="color:#94a3b8;font-size:10px">${r.model_version}</span>` : '';
+          return `
+            <div class="rec-item">
+              <div class="rec-info">
+                <div class="rec-name">${r.name} <span style="color:#3b82f6;font-size:10px">● server</span>${modelBadge}${verBadge}</div>
+                <div class="rec-meta">${dur} · ${r.total_detections ?? 0} det · ${r.unique_classes ?? 0} cls · avg ${conf}% · ${infer}ms infer</div>
+              </div>
+              <button class="btn btn-play" onclick="playServerRec(${r.id},'${r.name}')">▶</button>
+              <button class="btn btn-secondary" onclick="dlServerRec(${r.id})">↓</button>
+              <button class="btn btn-secondary" onclick="dlServerLog(${r.id})">📋</button>
+            </div>`;
+        }).join("");
+      }
+
+      // Server-side recordings loaded on page init
+      let serverRecordings = [];
+
+      window.dlRec = function(i) {
+        const r = recordings[i];
+        // If saved on server, download from server for reliability
+        if (r.serverId) { dlServerRec(r.serverId); return; }
+        const a = document.createElement("a");
+        a.href = r.url; a.download = r.name + ".webm"; a.click();
+      };
+      window.dlLog = function(i) {
+        const r = recordings[i];
+        if (r.serverId) { dlServerLog(r.serverId); return; }
+        const lines = [
+          "OpenDeploy Detection Session Log",
+          `Recording: ${r.name}`,
+          `Duration:  ${fmtDur(r.duration)}`,
+          `Frames:    ${r.frames}`,
+          `Detections:${r.detections}`,
+          `Classes:   ${r.classes}`,
+          `Avg Conf:  ${r.avgConf}%`,
+          `Avg Infer: ${r.avgInfer}ms`,
+          "",
+          "─── Event Log ───",
+          ...r.log.map(e => `[${e.ts}] ${e.html.replace(/<[^>]*>/g,"")}`),
+        ];
+        const b = new Blob([lines.join("\n")], { type: "text/plain" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(b); a.download = r.name + "_log.txt"; a.click();
+      };
+      window.dlServerRec = function(id) {
+        const apiUrl = apiInput.value.replace(/\/$/, "");
+        window.open(`${apiUrl}/recordings/${id}/video`, "_blank");
+      };
+      window.dlServerLog = function(id) {
+        const apiUrl = apiInput.value.replace(/\/$/, "");
+        window.open(`${apiUrl}/recordings/${id}/log`, "_blank");
+      };
+
+      // ═══════════════════════════════════════════════════════════════
+      //  Inline video player
+      // ═══════════════════════════════════════════════════════════════
+      window.playRec = function(i) {
+        const r = recordings[i];
+        if (r.serverId) { playServerRec(r.serverId, r.name); return; }
+        openPlayer(r.url, r.name, `${fmtDur(r.duration)} · ${r.detections} det · avg ${r.avgConf}%`);
+      };
+      window.playServerRec = function(id, name) {
+        const apiUrl = apiInput.value.replace(/\/$/, "");
+        openPlayer(`${apiUrl}/recordings/${id}/video`, name, "Server recording");
+      };
+      function openPlayer(src, name, meta) {
+        const vid = $("playerVideo");
+        vid.src = src;
+        $("playerName").textContent = name;
+        $("playerMeta").textContent = meta;
+        $("playerModal").classList.add("open");
+        vid.play();
+      }
+      window.closePlayer = function() {
+        const vid = $("playerVideo");
+        vid.pause();
+        vid.src = "";
+        $("playerModal").classList.remove("open");
+      };
+      // Close on backdrop click
+      $("playerModal").addEventListener("click", (e) => {
+        if (e.target === $("playerModal")) closePlayer();
+      });
+      // Close on Escape
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && $("playerModal").classList.contains("open")) closePlayer();
+      });
+
+      // Load existing server recordings on page load
+      async function loadServerRecordings() {
+        const apiUrl = apiInput.value.replace(/\/$/, "");
+        try {
+          const resp = await fetch(`${apiUrl}/recordings`);
+          if (!resp.ok) return;
+          const data = await resp.json();
+          serverRecordings = data.recordings || [];
+          updateRecList();
+        } catch (e) { /* server not reachable yet – that's fine */ }
+      }
+      loadServerRecordings();
+
+      // ═══════════════════════════════════════════════════════════════
+      //  Session timer
+      // ═══════════════════════════════════════════════════════════════
+      function startSessionTimer() {
+        sessionStart = performance.now();
+        sessionTimerIv = setInterval(() => {
+          sessionTimerEl.textContent = fmtDur(elapsed());
+        }, 500);
+      }
+      function stopSessionTimer() {
+        if (sessionTimerIv) { clearInterval(sessionTimerIv); sessionTimerIv = null; }
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      //  Reset
+      // ═══════════════════════════════════════════════════════════════
+      function resetMetrics() {
+        frameCount = 0; fpsStart = performance.now();
+        totalDetections = 0; totalInferMs = 0; inferCount = 0; inferHistory = [];
+        totalConf = 0; confCount = 0;
+        uniqueClasses = new Set(); classCounts = {};
+        prevDetClasses = null; stabilityHistory = [];
+        logEntries = []; lastLogClasses = new Set(); logFrameN = 0;
+        $("eventLog").innerHTML = "";
+        $("classList").innerHTML = "";
+        $("logCount").textContent = "0";
+        $("classCount").textContent = "0";
+        ["kDetections","kInferMs","kFPS","kAvgConf","kAvgInfer","kDetRate","kUnique","kTotalDet","kP95Infer","kStability"]
+          .forEach(id => { $(id).textContent = "--"; $(id).parentElement.className = "kpi"; });
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      //  Direct mode
+      // ═══════════════════════════════════════════════════════════════
       async function startDirect() {
         const apiUrl = apiInput.value.replace(/\/$/, "");
-
         const localStream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 480 },
-          audio: false,
+          video: { width: 640, height: 480 }, audio: false
         });
         stream = localStream;
         preview.srcObject = localStream;
+        await new Promise(r => { preview.onloadedmetadata = () => { preview.play(); r(); }; });
 
-        // Wait for video to be ready
-        await new Promise((resolve) => {
-          preview.onloadedmetadata = () => { preview.play(); resolve(); };
-        });
+        resetMetrics();
+        startSessionTimer();
+        addLog("00:00:00", '<span class="hi">Stream started</span> — direct mode');
+        setStatus("Live detection active — direct mode", true);
 
-        setStatus("Live detection active (direct mode)");
-        frameCount = 0;
-        fpsStart = performance.now();
-        const intervalMs = Number(document.getElementById("interval").value || 150);
-        timer = setInterval(() => sendFrameDirect(apiUrl), intervalMs);
+        const intervalMs = Number($("interval").value || 150);
+        timer = setInterval(() => sendFrame(apiUrl), intervalMs);
       }
 
-      let inferInFlight = false;
-
-      async function sendFrameDirect(apiUrl) {
+      async function sendFrame(apiUrl) {
         if (inferInFlight) return;
         inferInFlight = true;
-
         try {
-          // Capture frame to canvas
           ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
-
-          // Convert to JPEG base64
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
-          const base64 = dataUrl.split(",")[1];
-
-          const selectedModel = document.getElementById("model").value;
-
-          const response = await fetch(`${apiUrl}/vision/detect`, {
+          const b64 = canvas.toDataURL("image/jpeg", 0.8).split(",")[1];
+          const resp = await fetch(`${apiUrl}/vision/detect`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ model: selectedModel, image: base64 }),
+            body: JSON.stringify({ model: $("model").value, image: b64 }),
           });
+          if (!resp.ok) throw new Error(`API ${resp.status}: ${await resp.text()}`);
+          const data = await resp.json();
 
-          if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`API ${response.status}: ${errText}`);
-          }
-
-          const data = await response.json();
-
-          // Draw overlay
           if (data.detections && data.image_size) {
-            const [w, h] = data.image_size.split("x").map(Number);
+            const [w,h] = data.image_size.split("x").map(Number);
             drawDetections(data.detections, w, h);
           } else {
             overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
           }
-
-          updateStats(data);
-          setMetrics(data);
+          updateMetrics(data);
         } catch (err) {
           setStatus(`Error: ${err.message}`);
         } finally {
@@ -414,153 +934,46 @@
         }
       }
 
-      // ── WebRTC Mode (Linux with SHM gateway) ─────────────────────
-
-      async function startWebRTC() {
-        const gatewayUrl = gatewayInput.value.replace(/\/$/, "");
-        const apiUrl = apiInput.value.replace(/\/$/, "");
-        const apiKey = document.getElementById("apiKey").value;
-
-        peerConnection = new RTCPeerConnection();
-        dataChannel = peerConnection.createDataChannel("frames");
-
-        const localStream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 480 },
-          audio: false,
-        });
-        stream = localStream;
-        preview.srcObject = localStream;
-
-        peerConnection.addTrack(localStream.getVideoTracks()[0], localStream);
-
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-
-        const response = await fetch(`${gatewayUrl}/offer`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-API-Key": apiKey,
-          },
-          body: JSON.stringify({ sdp: offer.sdp, type: offer.type }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to get answer from gateway");
-        }
-
-        const answer = await response.json();
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-
-        dataChannel.onopen = () => {
-          setStatus("Streaming frames — live detection active (WebRTC)");
-          frameCount = 0;
-          fpsStart = performance.now();
-          const intervalMs = Number(document.getElementById("interval").value || 100);
-          timer = setInterval(() => sendFrameWebRTC(apiUrl, apiKey), intervalMs);
-        };
-
-        dataChannel.onclose = () => setStatus("DataChannel closed");
-        dataChannel.onerror = (err) => { console.error(err); setStatus("DataChannel error"); };
-      }
-
-      function encodeFrame(imageData) {
-        const width = imageData.width;
-        const height = imageData.height;
-        const format = 1; // RGB
-        const rgb = new Uint8Array(width * height * 3);
-
-        let srcIndex = 0;
-        let dstIndex = 0;
-        const data = imageData.data;
-        while (srcIndex < data.length) {
-          rgb[dstIndex++] = data[srcIndex];
-          rgb[dstIndex++] = data[srcIndex + 1];
-          rgb[dstIndex++] = data[srcIndex + 2];
-          srcIndex += 4;
-        }
-
-        const header = new ArrayBuffer(12);
-        const view = new DataView(header);
-        view.setUint32(0, width, true);
-        view.setUint32(4, height, true);
-        view.setUint32(8, format, true);
-
-        const payload = new Uint8Array(12 + rgb.length);
-        payload.set(new Uint8Array(header), 0);
-        payload.set(rgb, 12);
-
-        return payload;
-      }
-
-      async function sendFrameWebRTC(apiUrl, apiKey) {
-        if (!dataChannel || dataChannel.readyState !== "open") return;
-
-        ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const payload = encodeFrame(imageData);
-        dataChannel.send(payload);
-
-        if (inferInFlight) return;
-        inferInFlight = true;
-
-        const selectedModel = document.getElementById("model").value;
-
-        try {
-          const response = await fetch(`${apiUrl}/vision/stream/predict`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-API-Key": apiKey,
-            },
-            body: JSON.stringify({ model: selectedModel }),
-          });
-          if (!response.ok) throw new Error(`API error: ${response.status}`);
-          const data = await response.json();
-
-          if (data.detections && data.image_size) {
-            const [w, h] = data.image_size.split("x").map(Number);
-            drawDetections(data.detections, w, h);
-          } else {
-            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-          }
-
-          updateStats(data);
-          setMetrics(data.metrics || data);
-        } catch (err) {
-          setStatus(err.message);
-        } finally {
-          inferInFlight = false;
-        }
-      }
-
-      // ── Controls ──────────────────────────────────────────────────
-
+      // ═══════════════════════════════════════════════════════════════
+      //  Controls
+      // ═══════════════════════════════════════════════════════════════
       async function stopStream() {
+        if (isRecording) stopRecording();
         if (timer) { clearInterval(timer); timer = null; }
-        if (dataChannel) { dataChannel.close(); dataChannel = null; }
-        if (peerConnection) { peerConnection.close(); peerConnection = null; }
-        if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
+        if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
         overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-        setStatus("Stopped.");
+        stopSessionTimer();
+
+        const dur = fmtDur(elapsed());
+        addLog(dur, `<span class="hi">Stream stopped</span> — ${totalDetections} total det in ${dur}`);
+        setStatus(`Stopped — ${dur}, ${totalDetections} detections, ${uniqueClasses.size} classes.`);
+
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        recordBtn.disabled = true;
       }
 
-      startButton.addEventListener("click", async () => {
+      startBtn.addEventListener("click", async () => {
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        recordBtn.disabled = false;
         setStatus("Connecting...");
-        setMetrics("");
         try {
-          if (modeSelect.value === "direct") {
-            await startDirect();
-          } else {
-            await startWebRTC();
-          }
+          await startDirect();
         } catch (err) {
           console.error(err);
           setStatus(err.message || "Failed to start");
+          startBtn.disabled = false;
+          stopBtn.disabled = true;
+          recordBtn.disabled = true;
         }
       });
 
-      stopButton.addEventListener("click", () => stopStream());
+      stopBtn.addEventListener("click", () => stopStream());
+      recordBtn.addEventListener("click", () => {
+        if (isRecording) stopRecording();
+        else startRecording();
+      });
     </script>
   </body>
 </html>

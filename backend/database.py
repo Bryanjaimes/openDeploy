@@ -142,8 +142,69 @@ class ModelEvolution(Base):
     cost_per_1k_tokens = Column(Float, nullable=True)              # $ per 1k tokens
 
 
+class Recording(Base):
+    """Persisted video recordings of live detection sessions."""
+    __tablename__ = "recordings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    # File paths (relative to RECORDINGS_DIR)
+    video_path = Column(String, nullable=False)
+    log_path = Column(String, nullable=True)
+
+    # Session metadata
+    duration_ms = Column(Integer, nullable=True)       # recording duration in ms
+    total_frames = Column(Integer, nullable=True)
+    total_detections = Column(Integer, nullable=True)
+    unique_classes = Column(Integer, nullable=True)
+    avg_confidence = Column(Float, nullable=True)
+    avg_inference_ms = Column(Float, nullable=True)
+    model = Column(String, nullable=True)
+    classes_seen = Column(JSON, nullable=True)         # list of class names detected
+
+    # Model config — exactly which model + thresholds produced this recording
+    model_arch = Column(String, nullable=True)         # e.g. "yolov8n-seg", "yolov8s-seg"
+    model_version = Column(String, nullable=True)      # evolution version e.g. "V0", "V0.1"
+    conf_threshold = Column(Float, nullable=True)      # confidence threshold used
+    iou_threshold = Column(Float, nullable=True)       # IoU NMS threshold used
+    evolution_id = Column(Integer, nullable=True)      # FK to model_evolution.id (optional)
+
+    # File sizes
+    video_size_bytes = Column(Integer, nullable=True)
+    log_size_bytes = Column(Integer, nullable=True)
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
+    # Migrate: add new columns to existing tables if missing
+    _migrate_add_columns()
+
+
+def _migrate_add_columns():
+    """Add columns that were added after initial table creation."""
+    import sqlite3
+    db_path = DATABASE_URL.replace("sqlite:///", "")
+    if not os.path.exists(db_path):
+        return
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    # Get existing columns for recordings table
+    cur.execute("PRAGMA table_info(recordings)")
+    existing = {row[1] for row in cur.fetchall()}
+    migrations = [
+        ("model_arch", "TEXT"),
+        ("model_version", "TEXT"),
+        ("conf_threshold", "REAL"),
+        ("iou_threshold", "REAL"),
+        ("evolution_id", "INTEGER"),
+    ]
+    for col_name, col_type in migrations:
+        if col_name not in existing:
+            cur.execute(f"ALTER TABLE recordings ADD COLUMN {col_name} {col_type}")
+    conn.commit()
+    conn.close()
 
 
 def get_db():
