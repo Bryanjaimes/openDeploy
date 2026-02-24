@@ -171,6 +171,25 @@ class Recording(Base):
     iou_threshold = Column(Float, nullable=True)       # IoU NMS threshold used
     evolution_id = Column(Integer, nullable=True)      # FK to model_evolution.id (optional)
 
+    # Extended CV performance metrics
+    fps = Column(Float, nullable=True)                 # frames per second during recording
+    p95_inference_ms = Column(Float, nullable=True)    # 95th percentile inference latency
+    min_inference_ms = Column(Float, nullable=True)    # fastest frame inference
+    max_inference_ms = Column(Float, nullable=True)    # slowest frame inference
+    total_inference_ms = Column(Float, nullable=True)  # total inference compute time
+    detection_rate = Column(Float, nullable=True)      # detections per second
+    stability_score = Column(Float, nullable=True)     # frame-to-frame class stability %
+    peak_detections = Column(Integer, nullable=True)   # max detections in a single frame
+    peak_classes = Column(Integer, nullable=True)      # max unique classes in a single frame
+    input_resolution = Column(String, nullable=True)   # e.g. "640x480"
+    serving_backend = Column(String, nullable=True)    # "onnxruntime" | "triton" | "trt"
+    device_source = Column(String, nullable=True)      # "camera" | "video_upload" | "image"
+    seg_avg_ms = Column(Float, nullable=True)          # avg segmentation inference (combined)
+    pose_avg_ms = Column(Float, nullable=True)         # avg pose inference (combined)
+    per_class_counts = Column(JSON, nullable=True)     # {class_name: count} breakdown
+    confidence_histogram = Column(JSON, nullable=True) # [bucket_count...] histogram
+    inference_histogram = Column(JSON, nullable=True)  # [bucket_count...] latency histogram
+
     # File sizes
     video_size_bytes = Column(Integer, nullable=True)
     log_size_bytes = Column(Integer, nullable=True)
@@ -199,6 +218,23 @@ def _migrate_add_columns():
         ("conf_threshold", "REAL"),
         ("iou_threshold", "REAL"),
         ("evolution_id", "INTEGER"),
+        ("fps", "REAL"),
+        ("p95_inference_ms", "REAL"),
+        ("min_inference_ms", "REAL"),
+        ("max_inference_ms", "REAL"),
+        ("total_inference_ms", "REAL"),
+        ("detection_rate", "REAL"),
+        ("stability_score", "REAL"),
+        ("peak_detections", "INTEGER"),
+        ("peak_classes", "INTEGER"),
+        ("input_resolution", "TEXT"),
+        ("serving_backend", "TEXT"),
+        ("device_source", "TEXT"),
+        ("seg_avg_ms", "REAL"),
+        ("pose_avg_ms", "REAL"),
+        ("per_class_counts", "TEXT"),
+        ("confidence_histogram", "TEXT"),
+        ("inference_histogram", "TEXT"),
     ]
     for col_name, col_type in migrations:
         if col_name not in existing:

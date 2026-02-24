@@ -5,6 +5,7 @@ from starlette.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, Dict, Tuple
 from contextlib import asynccontextmanager
+import asyncio
 import time
 import os
 import logging
@@ -244,6 +245,17 @@ class DirectDetectRequest(BaseModel):
     image: str  # base64-encoded image (JPEG/PNG)
 
 
+class DirectPoseRequest(BaseModel):
+    image: str  # base64-encoded image (JPEG/PNG)
+    conf_threshold: float | None = None
+    iou_threshold: float | None = None
+    kpt_threshold: float | None = None
+
+
+class CombinedVisionRequest(BaseModel):
+    image: str  # base64-encoded image (JPEG/PNG)
+
+
 @app.post("/vision/detect")
 async def vision_detect_direct(request: DirectDetectRequest):
     """Direct frame detection — accepts a base64 image, returns detections.
@@ -279,6 +291,111 @@ async def vision_detect_direct(request: DirectDetectRequest):
         result["metrics"]["compute_ms"] = compute_ms
 
     return result
+
+
+@app.post("/vision/pose")
+async def vision_pose_direct(request: DirectPoseRequest):
+    """Pose estimation — accepts a base64 image, returns person bounding boxes
+    with 17-keypoint skeletons and confidence scores.
+
+    No SHM or WebRTC gateway required. Ideal for local / Windows dev.
+    Part of the V7-P2 Sports Movement Vision Pipeline.
+    """
+    import base64
+
+    model = registry.get_model("yolov8-pose")
+    if not model:
+        raise HTTPException(
+            status_code=404,
+            detail="yolov8-pose model not loaded. Ensure the ONNX model exists "
+                   "at triton_model_repo/yolov8_pose/1/model.onnx — "
+                   "run: python scripts/export_yolov8_pose_onnx.py"
+        )
+
+    if hasattr(model, "ready") and not getattr(model, "ready", False):
+        start = time.perf_counter()
+        model.load()
+        duration_ms = (time.perf_counter() - start) * 1000.0
+        metrics_store.record_model_load(model.name, duration_ms)
+        MODEL_LOAD_MS.labels(model.name).observe(duration_ms)
+
+    try:
+        image_bytes = base64.b64decode(request.image)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 image data")
+
+    compute_start = time.perf_counter()
+    result = await model.predict(image_bytes)
+    compute_ms = (time.perf_counter() - compute_start) * 1000.0
+    metrics_store.record_compute(compute_ms)
+    COMPUTE_MS.observe(compute_ms)
+
+    if isinstance(result, dict):
+        result.setdefault("metrics", {})
+        result["metrics"]["compute_ms"] = compute_ms
+
+    return result
+
+
+@app.post("/vision/analyze")
+async def vision_analyze_combined(request: CombinedVisionRequest):
+    """Run both YOLOv8-seg (instance segmentation) and YOLOv8-pose (keypoint
+    estimation) concurrently on the same image and return combined results.
+
+    This is the foundation for the V7 Sports Movement Vision Pipeline —
+    downstream temporal action classifiers need both segmentation masks
+    and skeleton keypoints per person.
+
+    Leverages asyncio.gather to run both models in parallel, matching
+    Triton's dynamic batching for throughput without latency penalty.
+    """
+    import base64
+
+    seg_model = registry.get_model("yolov8-seg")
+    pose_model = registry.get_model("yolov8-pose")
+
+    missing = []
+    if not seg_model:
+        missing.append("yolov8-seg")
+    if not pose_model:
+        missing.append("yolov8-pose")
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Model(s) not loaded: {', '.join(missing)}. "
+                   "Ensure ONNX files exist in triton_model_repo/."
+        )
+
+    # Lazy-load if not ready
+    for m in [seg_model, pose_model]:
+        if hasattr(m, "ready") and not getattr(m, "ready", False):
+            start = time.perf_counter()
+            m.load()
+            duration_ms = (time.perf_counter() - start) * 1000.0
+            metrics_store.record_model_load(m.name, duration_ms)
+            MODEL_LOAD_MS.labels(m.name).observe(duration_ms)
+
+    try:
+        image_bytes = base64.b64decode(request.image)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 image data")
+
+    # Run both models concurrently
+    compute_start = time.perf_counter()
+    seg_result, pose_result = await asyncio.gather(
+        seg_model.predict(image_bytes),
+        pose_model.predict(image_bytes),
+    )
+    compute_ms = (time.perf_counter() - compute_start) * 1000.0
+    metrics_store.record_compute(compute_ms)
+    COMPUTE_MS.observe(compute_ms)
+
+    return {
+        "combined": True,
+        "total_compute_ms": round(compute_ms, 2),
+        "segmentation": seg_result,
+        "pose": pose_result,
+    }
 
 
 @app.post("/vision/stream/predict", dependencies=[Depends(get_api_key)])
@@ -559,14 +676,14 @@ def list_glossary_cache(db: Session = Depends(get_db)):
     ]
 
 
-# ── Serve the vision client at /vision ──────────────────────────
+# ── Serve the combined Vision Studio at /vision ─────────────────
 @app.get("/vision", response_class=HTMLResponse)
 def serve_vision_client():
-    """Serve the live detection client HTML page."""
-    client_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "..", "frontend", "webrtc-client.html"
+    """Serve the combined Vision Studio — image, live camera, video upload, recordings."""
+    studio_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "frontend", "vision-studio.html"
     )
-    with open(client_path, "r", encoding="utf-8") as f:
+    with open(studio_path, "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
 
 
@@ -909,6 +1026,24 @@ async def upload_recording(
     model_version: str = Form(""),
     conf_threshold: float = Form(0.0),
     iou_threshold: float = Form(0.0),
+    # Extended CV metrics
+    fps: float = Form(0.0),
+    p95_inference_ms: float = Form(0.0),
+    min_inference_ms: float = Form(0.0),
+    max_inference_ms: float = Form(0.0),
+    total_inference_ms: float = Form(0.0),
+    detection_rate: float = Form(0.0),
+    stability_score: float = Form(0.0),
+    peak_detections: int = Form(0),
+    peak_classes: int = Form(0),
+    input_resolution: str = Form(""),
+    serving_backend: str = Form(""),
+    device_source: str = Form(""),
+    seg_avg_ms: float = Form(0.0),
+    pose_avg_ms: float = Form(0.0),
+    per_class_counts: str = Form("{}"),
+    confidence_histogram: str = Form("[]"),
+    inference_histogram: str = Form("[]"),
     db: Session = Depends(get_db),
 ):
     """Upload a composite recording (video + optional log) from the live detection client."""
@@ -919,7 +1054,8 @@ async def upload_recording(
         name = f"rec_{rec_id}"
 
     # Save video
-    video_filename = f"{rec_id}.webm"
+    ext = "mp4" if (video.filename or "").endswith(".mp4") else "webm"
+    video_filename = f"{rec_id}.{ext}"
     video_path = os.path.join(RECORDINGS_DIR, video_filename)
     with open(video_path, "wb") as f:
         shutil.copyfileobj(video.file, f)
@@ -940,6 +1076,20 @@ async def upload_recording(
         classes_list = _json.loads(classes_seen)
     except Exception:
         classes_list = []
+
+    # Parse per_class_counts, histograms
+    try:
+        per_class_counts_val = _json.loads(per_class_counts)
+    except Exception:
+        per_class_counts_val = {}
+    try:
+        conf_hist_val = _json.loads(confidence_histogram)
+    except Exception:
+        conf_hist_val = []
+    try:
+        infer_hist_val = _json.loads(inference_histogram)
+    except Exception:
+        infer_hist_val = []
 
     # Match to latest evolution entry (by model_arch or model name)
     evolution_id_val = None
@@ -969,6 +1119,23 @@ async def upload_recording(
         conf_threshold=conf_threshold or None,
         iou_threshold=iou_threshold or None,
         evolution_id=evolution_id_val,
+        fps=fps or None,
+        p95_inference_ms=p95_inference_ms or None,
+        min_inference_ms=min_inference_ms or None,
+        max_inference_ms=max_inference_ms or None,
+        total_inference_ms=total_inference_ms or None,
+        detection_rate=detection_rate or None,
+        stability_score=stability_score or None,
+        peak_detections=peak_detections or None,
+        peak_classes=peak_classes or None,
+        input_resolution=input_resolution or None,
+        serving_backend=serving_backend or None,
+        device_source=device_source or None,
+        seg_avg_ms=seg_avg_ms or None,
+        pose_avg_ms=pose_avg_ms or None,
+        per_class_counts=per_class_counts_val or None,
+        confidence_histogram=conf_hist_val or None,
+        inference_histogram=infer_hist_val or None,
         video_size_bytes=video_size,
         log_size_bytes=log_size,
     )
@@ -1013,6 +1180,24 @@ def _serialize_recording(r: Recording) -> dict:
         "conf_threshold": getattr(r, 'conf_threshold', None),
         "iou_threshold": getattr(r, 'iou_threshold', None),
         "evolution_id": getattr(r, 'evolution_id', None),
+        # Extended CV metrics
+        "fps": getattr(r, 'fps', None),
+        "p95_inference_ms": getattr(r, 'p95_inference_ms', None),
+        "min_inference_ms": getattr(r, 'min_inference_ms', None),
+        "max_inference_ms": getattr(r, 'max_inference_ms', None),
+        "total_inference_ms": getattr(r, 'total_inference_ms', None),
+        "detection_rate": getattr(r, 'detection_rate', None),
+        "stability_score": getattr(r, 'stability_score', None),
+        "peak_detections": getattr(r, 'peak_detections', None),
+        "peak_classes": getattr(r, 'peak_classes', None),
+        "input_resolution": getattr(r, 'input_resolution', None),
+        "serving_backend": getattr(r, 'serving_backend', None),
+        "device_source": getattr(r, 'device_source', None),
+        "seg_avg_ms": getattr(r, 'seg_avg_ms', None),
+        "pose_avg_ms": getattr(r, 'pose_avg_ms', None),
+        "per_class_counts": getattr(r, 'per_class_counts', None),
+        "confidence_histogram": getattr(r, 'confidence_histogram', None),
+        "inference_histogram": getattr(r, 'inference_histogram', None),
         "video_size_bytes": r.video_size_bytes,
         "log_size_bytes": r.log_size_bytes,
     }
@@ -1027,7 +1212,9 @@ def download_recording_video(rec_id: int, db: Session = Depends(get_db)):
     path = os.path.join(RECORDINGS_DIR, rec.video_path)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Video file missing")
-    return FileResponse(path, media_type="video/webm", filename=f"{rec.name}.webm")
+    mt = "video/mp4" if rec.video_path.endswith(".mp4") else "video/webm"
+    ext = "mp4" if rec.video_path.endswith(".mp4") else "webm"
+    return FileResponse(path, media_type=mt, filename=f"{rec.name}.{ext}")
 
 
 @app.get("/recordings/{rec_id}/log")

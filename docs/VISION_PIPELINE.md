@@ -549,15 +549,82 @@ All configuration is via environment variables — no config files needed.
 
 ---
 
+## 11b. YOLOv8-Pose Pipeline (V7-P2)
+
+> Added 2026-02-23. Runs alongside YOLOv8-seg for combined segmentation + pose estimation.
+
+### Overview
+
+YOLOv8-pose is an anchor-free keypoint estimation model from Ultralytics. It detects persons and outputs 17 COCO keypoints per person (nose, eyes, ears, shoulders, elbows, wrists, hips, knees, ankles) along with bounding boxes and confidence scores.
+
+### Model I/O
+
+| Direction | Name | Shape | Type |
+|-----------|------|-------|------|
+| Input | `images` | `[batch, 3, 640, 640]` | FP32 |
+| Output | `output0` | `[batch, 56, 8400]` | FP32 |
+
+The 56 output channels decompose as: **4** (box xywh) + **1** (object confidence) + **51** (17 keypoints × 3: x, y, visibility).
+
+### Postprocessing
+
+1. Transpose output: `(56, 8400)` → `(8400, 56)`
+2. Split columns: boxes (4), confidence (1), keypoints (51)
+3. Confidence filter at `CONF_THRESHOLD`
+4. xywh → xyxy box conversion
+5. Pure-NumPy NMS at `IOU_THRESHOLD` (identical algorithm to seg model)
+6. Scale boxes back to original image coordinates (undo letterbox padding + ratio)
+7. Reshape keypoints: `(N, 51)` → `(N, 17, 3)` and scale x/y back to original coords
+8. Compute skeleton edges with pre-resolved `from_xy`/`to_xy` coordinates
+9. Return JSON with per-person bboxes, keypoints, visibility flags, and skeleton bones
+
+### Skeleton Definition
+
+16 bones connecting the 17 COCO keypoints, grouped by body region:
+
+| Group | Bones |
+|-------|-------|
+| Face | nose↔left_eye, nose↔right_eye, left_eye↔left_ear, right_eye↔right_ear |
+| Upper Body | left_shoulder↔right_shoulder, shoulders↔elbows, elbows↔wrists |
+| Torso | left_shoulder↔left_hip, right_shoulder↔right_hip, left_hip↔right_hip |
+| Lower Body | hips↔knees, knees↔ankles |
+
+### Serving Modes
+
+Identical to seg: ONNX Runtime (default) or Triton when `TRITON_URL` is set.
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/vision/pose` | POST | Dedicated pose estimation (base64 image) |
+| `/vision/detect` | POST | Generic — set `"model": "yolov8-pose"` |
+| `/vision/analyze` | POST | Runs seg + pose concurrently via `asyncio.gather` |
+
+### Triton Dynamic Batching
+
+Both seg and pose Triton configs now include dynamic batching:
+
+```protobuf
+dynamic_batching {
+  preferred_batch_size: [1, 2, 4, 8]
+  max_queue_delay_microseconds: 5000
+}
+```
+
+This groups concurrent inference requests (up to batch=8) with a max 5ms queue wait, so multiple frames are processed simultaneously on the GPU without serializing them.
+
+---
+
 ## 12. What's Next — V7 Roadmap
 
-The current pipeline handles single-frame detection. V7 extends it to temporal, multi-model sports movement recognition:
+The current pipeline handles single-frame detection and pose estimation. V7 extends it to temporal, multi-model sports movement recognition:
 
 | Phase | Status | What Ships |
 |-------|--------|------------|
-| **P0** | Planned | Multi-frame ring buffer (64 frames with timestamps) |
+| **P0** | **Done** | Multi-frame ring buffer (64 frames with timestamps) |
 | **P1** | **Done** | YOLOv8-seg person detection + instance segmentation |
-| **P2** | Planned | YOLOv8-pose skeleton keypoints (17 joints per person) |
+| **P2** | **Done** | YOLOv8-pose skeleton keypoints (17 joints per person) |
 | **P3** | Planned | Temporal action recognition (SlowFast / X3D on Kinetics-700) |
 | **P4** | Planned | Sports-specific fine-tuning (10K+ action classes) |
 | **P5** | Planned | Novel movement detection + VLM description generation |

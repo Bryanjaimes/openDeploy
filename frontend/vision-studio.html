@@ -1,0 +1,1310 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>OpenDeploy — Vision Studio</title>
+    <style>
+      /* ── Reset ───────────────────────────────────────── */
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,sans-serif;background:#0a0e1a;color:#e6edf3;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+
+      /* ── Layout shell ────────────────────────────────── */
+      .shell{max-width:1400px;margin:0 auto;padding:12px}
+
+      /* ── Header ──────────────────────────────────────── */
+      .hdr{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+      .hdr h1{font-size:20px;font-weight:800;background:linear-gradient(135deg,#3b82f6,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+      .hdr .tag{font-size:10px;background:#1e293b;color:#94a3b8;padding:3px 8px;border-radius:6px;letter-spacing:.5px;text-transform:uppercase}
+      .hdr .spacer{flex:1}
+      .hdr .timer{font-size:13px;font-variant-numeric:tabular-nums;color:#64748b;background:#111827;border:1px solid #1e293b;padding:5px 12px;border-radius:8px}
+      .hdr .timer.rec{color:#ef4444;border-color:#dc2626;animation:pulse-r 1.5s infinite}
+      @keyframes pulse-r{50%{opacity:.6}}
+
+      /* ── Tabs ────────────────────────────────────────── */
+      .tabs{display:flex;gap:4px;margin-bottom:12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+      .tab{padding:8px 16px;border-radius:8px;border:1px solid #1e293b;background:#111827;color:#94a3b8;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s}
+      .tab:hover{background:#1e293b;color:#e6edf3}
+      .tab.active{background:#2563eb;color:#fff;border-color:#2563eb}
+
+      /* ── Config bar ──────────────────────────────────── */
+      .cfg{display:flex;flex-wrap:wrap;gap:8px;background:#111827;border:1px solid #1e293b;border-radius:10px;padding:12px;margin-bottom:12px;align-items:end}
+      .cfg .f{flex:1;min-width:130px}
+      .cfg .f.sm{flex:0 0 100px;min-width:80px}
+      .cfg label{display:block;font-size:10px;color:#64748b;margin-bottom:3px;text-transform:uppercase;letter-spacing:.4px}
+      .cfg input,.cfg select{width:100%;border-radius:6px;border:1px solid #1e293b;padding:7px 9px;font-size:12px;background:#0a0e1a;color:#e6edf3}
+      .cfg select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:24px}
+
+      /* ── Buttons ──────────────────────────────────────── */
+      .btn{padding:7px 16px;border-radius:8px;border:1px solid transparent;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .12s;touch-action:manipulation}
+      .btn-p{background:#2563eb;color:#fff;border-color:#2563eb}
+      .btn-p:hover{background:#1d4ed8}
+      .btn-p:disabled{background:#1e3a5f;opacity:.5;cursor:default}
+      .btn-d{background:#dc2626;color:#fff;border-color:#dc2626}
+      .btn-d:hover{background:#b91c1c}
+      .btn-d:disabled{opacity:.4;cursor:default}
+      .btn-s{background:#1e293b;color:#94a3b8;border-color:#334155}
+      .btn-s:hover{background:#334155;color:#e6edf3}
+      .btn-rec{background:#111827;color:#94a3b8;border-color:#334155}
+      .btn-rec.on{background:#7f1d1d;color:#fca5a5;border-color:#dc2626;animation:pulse-r 1.5s infinite}
+
+      /* ── Panels (tabs) ───────────────────────────────── */
+      .panel{display:none}
+      .panel.active{display:block}
+
+      /* ── Drop zone ───────────────────────────────────── */
+      .dropzone{border:2px dashed #334155;border-radius:12px;padding:40px 20px;text-align:center;cursor:pointer;transition:all .2s;background:#0d1117}
+      .dropzone:hover,.dropzone.over{border-color:#3b82f6;background:#111827}
+      .dropzone .icon{font-size:40px;margin-bottom:8px;opacity:.4}
+      .dropzone .hint{font-size:13px;color:#64748b}
+      .dropzone input[type=file]{display:none}
+
+      /* ── Canvas area ─────────────────────────────────── */
+      .canvas-wrap{position:relative;display:inline-block;max-width:100%;border-radius:10px;overflow:hidden;background:#0d1117;border:1px solid #1e293b}
+      .canvas-wrap canvas,.canvas-wrap video,.canvas-wrap img{display:block;max-width:100%;border-radius:10px}
+      .canvas-wrap .overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+
+      /* ── Results panel ───────────────────────────────── */
+      .results{margin-top:12px}
+      .res-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+      .res-chip{background:#111827;border:1px solid #1e293b;border-radius:8px;padding:6px 12px;font-size:12px;color:#94a3b8}
+      .res-chip b{color:#3b82f6;font-weight:700}
+
+      /* ── Detection cards ─────────────────────────────── */
+      .det-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px}
+      .det-card{background:#111827;border:1px solid #1e293b;border-radius:10px;padding:10px 12px}
+      .det-card .det-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+      .det-card .det-name{font-weight:700;font-size:13px}
+      .det-card .det-conf{font-size:12px;color:#3b82f6;font-weight:600}
+      .det-card .det-bbox{font-size:10px;color:#64748b;margin-bottom:4px}
+      .kpts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:3px;font-size:10px}
+      .kpt{display:flex;justify-content:space-between;padding:2px 4px;border-radius:4px;background:#0d1117}
+      .kpt.vis{color:#10b981}
+      .kpt.hid{color:#475569}
+      .skel-info{font-size:10px;color:#64748b;margin-top:4px}
+
+      /* ── Live camera panel ───────────────────────────── */
+      .live-grid{display:grid;grid-template-columns:1fr 340px;gap:12px}
+      @media(max-width:900px){.live-grid{grid-template-columns:1fr}}
+      .live-video{position:relative;width:100%;border-radius:10px;overflow:hidden;background:#0d1117;border:1px solid #1e293b}
+      .live-video video{display:block;width:100%;border-radius:10px}
+      .live-video .overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;border-radius:10px}
+      .record-canvas{display:none}
+
+      /* ── KPIs ────────────────────────────────────────── */
+      .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,1fr));gap:5px;margin-top:10px}
+      .kpi{background:#0d1117;border:1px solid #1e293b;border-radius:8px;padding:6px;text-align:center}
+      .kpi .v{font-size:15px;font-weight:700;color:#3b82f6;font-variant-numeric:tabular-nums}
+      .kpi .l{font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:.3px}
+      .kpi.g .v{color:#10b981}
+      .kpi.w .v{color:#f59e0b}
+
+      /* ── Sidebar sections ────────────────────────────── */
+      .side{display:flex;flex-direction:column;gap:10px}
+      .sec{background:#111827;border:1px solid #1e293b;border-radius:10px;overflow:hidden}
+      .sec-h{font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px 4px;display:flex;justify-content:space-between;align-items:center}
+      .sec-h .badge{background:#1e293b;color:#94a3b8;font-size:9px;padding:2px 6px;border-radius:8px}
+      .sec-body{padding:4px 10px 8px;max-height:200px;overflow-y:auto}
+
+      /* ── Log entries ─────────────────────────────────── */
+      .log-e{display:flex;gap:5px;padding:2px 0;border-bottom:1px solid #1e293b18;font-size:10px}
+      .log-e .t{color:#475569;font-variant-numeric:tabular-nums;flex-shrink:0;width:50px}
+      .log-e .m{color:#94a3b8;flex:1;word-break:break-word}
+      .log-e .m .hi{color:#60a5fa;font-weight:600}
+      .log-e .m .det{color:#34d399}
+      .log-e .m .gone{color:#f87171}
+
+      /* ── Class rows ──────────────────────────────────── */
+      .cls-row{display:flex;align-items:center;gap:5px;padding:2px 0;font-size:11px;border-bottom:1px solid #1e293b18}
+      .cls-row .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+      .cls-row .name{flex:1;color:#d1d5db}
+      .cls-row .cnt{color:#94a3b8;font-weight:600;min-width:24px;text-align:right;font-variant-numeric:tabular-nums}
+      .cls-row .bar-w{width:40px;height:3px;background:#1e293b;border-radius:2px;flex-shrink:0}
+      .cls-row .bar-f{height:100%;border-radius:2px;transition:width .3s}
+
+      /* ── Recording list ──────────────────────────────── */
+      .rec-item{display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #1e293b18;font-size:11px}
+      .rec-item .ri{flex:1;min-width:0}
+      .rec-item .rn{color:#d1d5db;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .rec-item .rm{color:#64748b;font-size:9px;margin-top:1px}
+      .rec-item .btn{padding:3px 8px;font-size:10px}
+      .rec-empty{padding:12px;color:#334155;font-size:11px;text-align:center}
+
+      /* ── Player modal ────────────────────────────────── */
+      .modal{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.88);align-items:center;justify-content:center;flex-direction:column;gap:10px}
+      .modal.open{display:flex}
+      .modal video,.modal img{max-width:92vw;max-height:78vh;border-radius:10px;border:1px solid #334155}
+      .modal-bar{display:flex;align-items:center;gap:10px;background:#111827;border:1px solid #1e293b;border-radius:10px;padding:8px 16px}
+      .modal-bar .mn{color:#d1d5db;font-size:13px;font-weight:600}
+      .modal-bar .mm{color:#64748b;font-size:10px}
+
+      /* ── Status ──────────────────────────────────────── */
+      .status{margin-top:10px;font-size:11px;color:#475569;display:flex;align-items:center;gap:8px}
+      .dot{width:6px;height:6px;border-radius:50%;background:#4b5563;flex-shrink:0}
+      .dot.on{background:#10b981;animation:pulse-d 1.5s infinite}
+      @keyframes pulse-d{50%{opacity:.4}}
+
+      /* ── Scrollbar ───────────────────────────────────── */
+      ::-webkit-scrollbar{width:3px}
+      ::-webkit-scrollbar-track{background:transparent}
+      ::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
+
+      /* ── Skeleton overlay colours ────────────────────── */
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <!-- Header -->
+      <div class="hdr">
+        <h1>OpenDeploy Vision Studio</h1>
+        <span class="tag">V7-P2</span>
+        <div class="spacer"></div>
+        <div class="timer" id="timer">00:00:00</div>
+      </div>
+
+      <!-- Tab bar -->
+      <div class="tabs" id="tabBar">
+        <div class="tab active" data-tab="image">📷 Image</div>
+        <div class="tab" data-tab="camera">🎥 Live Camera</div>
+        <div class="tab" data-tab="video">🎞️ Video Upload</div>
+        <div class="tab" data-tab="recordings">💾 Recordings</div>
+      </div>
+
+      <!-- Config bar -->
+      <div class="cfg">
+        <div class="f">
+          <label for="api">API URL</label>
+          <input id="api" value="" placeholder="http://192.168.1.154:8001" />
+        </div>
+        <div class="f">
+          <label for="modelSel">Vision Model</label>
+          <select id="modelSel">
+            <option value="yolov8-seg">YOLOv8-Seg (Segmentation)</option>
+            <option value="yolov8-pose">YOLOv8-Pose (Keypoints)</option>
+            <option value="analyze">Combined (Seg + Pose)</option>
+          </select>
+        </div>
+        <div class="f sm">
+          <label for="confTh">Conf</label>
+          <input id="confTh" type="number" value="0.25" min="0" max="1" step="0.05" />
+        </div>
+        <div class="f sm">
+          <label for="interval">Interval ms</label>
+          <input id="interval" type="number" value="120" min="10" />
+        </div>
+        <button class="btn btn-p" id="runBtn">▶ Run</button>
+        <button class="btn btn-d" id="stopBtn" disabled>■ Stop</button>
+        <button class="btn btn-rec" id="recBtn" disabled>● Rec</button>
+        <button class="btn btn-s" id="flipBtn" disabled title="Flip camera">🔄 Flip</button>
+      </div>
+
+      <!-- ════════════════════════════════════════════════════════ -->
+      <!--  TAB: Image upload                                      -->
+      <!-- ════════════════════════════════════════════════════════ -->
+      <div class="panel active" id="panelImage">
+        <div class="dropzone" id="dropZone">
+          <div class="icon">📷</div>
+          <div class="hint">Drop an image here, paste from clipboard, or tap to browse</div>
+          <input type="file" id="fileInput" accept="image/*" />
+        </div>
+        <div id="imgResultArea" style="margin-top:12px"></div>
+      </div>
+
+      <!-- ════════════════════════════════════════════════════════ -->
+      <!--  TAB: Live camera                                       -->
+      <!-- ════════════════════════════════════════════════════════ -->
+      <div class="panel" id="panelCamera">
+        <div class="live-grid">
+          <div>
+            <div class="live-video" id="camContainer">
+              <video id="camVid" autoplay playsinline muted></video>
+              <canvas id="camOverlay" class="overlay"></canvas>
+            </div>
+            <canvas id="camBuf" width="640" height="480" style="display:none"></canvas>
+            <canvas id="recCanvas" class="record-canvas" width="640" height="480"></canvas>
+            <div class="kpis" id="kpis">
+              <div class="kpi"><div class="v" id="kDet">0</div><div class="l">Detections</div></div>
+              <div class="kpi"><div class="v" id="kInfer">--</div><div class="l">Inference</div></div>
+              <div class="kpi"><div class="v" id="kFps">--</div><div class="l">FPS</div></div>
+              <div class="kpi"><div class="v" id="kAvgC">--</div><div class="l">Avg Conf</div></div>
+              <div class="kpi"><div class="v" id="kAvgI">--</div><div class="l">Avg Infer</div></div>
+              <div class="kpi"><div class="v" id="kRate">--</div><div class="l">Det/sec</div></div>
+              <div class="kpi"><div class="v" id="kCls">0</div><div class="l">Classes</div></div>
+              <div class="kpi"><div class="v" id="kTot">0</div><div class="l">Total</div></div>
+              <div class="kpi"><div class="v" id="kP95">--</div><div class="l">P95</div></div>
+              <div class="kpi"><div class="v" id="kStab">--</div><div class="l">Stability</div></div>
+            </div>
+          </div>
+          <div class="side">
+            <div class="sec">
+              <div class="sec-h">Classes <span class="badge" id="clsCnt">0</span></div>
+              <div class="sec-body" id="clsList"></div>
+            </div>
+            <div class="sec" style="flex:1">
+              <div class="sec-h">Event Log <span class="badge" id="logCnt">0</span></div>
+              <div class="sec-body" id="logList" style="max-height:260px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════════════════════ -->
+      <!--  TAB: Video upload                                      -->
+      <!-- ════════════════════════════════════════════════════════ -->
+      <div class="panel" id="panelVideo">
+        <div class="dropzone" id="vidDropZone">
+          <div class="icon">🎞️</div>
+          <div class="hint">Drop a video file or tap to browse</div>
+          <input type="file" id="vidFileInput" accept="video/*" />
+        </div>
+        <div id="vidResultArea" style="margin-top:12px"></div>
+      </div>
+
+      <!-- ════════════════════════════════════════════════════════ -->
+      <!--  TAB: Recordings                                        -->
+      <!-- ════════════════════════════════════════════════════════ -->
+      <div class="panel" id="panelRecordings">
+        <div class="sec" style="border:none;background:transparent">
+          <div class="sec-h" style="padding:0 0 8px">Saved Recordings <span class="badge" id="recCnt">0</span>
+            <button class="btn btn-s" id="refreshRecsBtn" style="font-size:10px;padding:4px 10px">↻ Refresh</button>
+          </div>
+          <div id="recListMain"></div>
+        </div>
+      </div>
+
+      <!-- Player modal -->
+      <div class="modal" id="playerModal">
+        <video id="playerVid" controls></video>
+        <div class="modal-bar">
+          <span class="mn" id="pName"></span>
+          <span class="mm" id="pMeta"></span>
+          <div style="flex:1"></div>
+          <button class="btn btn-s" onclick="closePlayer()">✕ Close</button>
+        </div>
+      </div>
+
+      <!-- Status -->
+      <div class="status">
+        <div class="dot" id="sDot"></div>
+        <span id="sText">Idle — select a tab and run.</span>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!--  JavaScript                                                -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <script>
+    (function(){
+      "use strict";
+
+      /* ── Helpers ─────────────────────────────────────── */
+      const $=id=>document.getElementById(id);
+      const api=()=>$("api").value.replace(/\/$/,"");
+      const model=()=>$("modelSel").value;
+      const COLORS=["#FF3838","#FF9D97","#FF701F","#FFB21D","#CFD231","#48F90A","#92CC17","#3DDB86","#1A9334","#00D4BB","#2C99A8","#00C2FF","#344593","#6473FF","#0018EC","#8438FF","#520085","#CB38FF","#FF95C8","#FF37C7"];
+      const COL=i=>COLORS[i%COLORS.length];
+      const rgba=(hex,a)=>`rgba(${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)},${a})`;
+      function fmtDur(ms){const s=Math.floor(ms/1000);return[Math.floor(s/3600),Math.floor(s%3600/60),s%60].map(v=>String(v).padStart(2,"0")).join(":")}
+
+      /* ── Tab switching ───────────────────────────────── */
+      const panels={image:$("panelImage"),camera:$("panelCamera"),video:$("panelVideo"),recordings:$("panelRecordings")};
+      let activeTab="image";
+      document.querySelectorAll(".tab").forEach(t=>{
+        t.addEventListener("click",()=>{
+          document.querySelector(".tab.active").classList.remove("active");
+          t.classList.add("active");
+          const id=t.dataset.tab;
+          panels[activeTab].classList.remove("active");
+          panels[id].classList.add("active");
+          activeTab=id;
+          if(id==="recordings") loadRecordings();
+        });
+      });
+
+      /* ── API auto-detect ─────────────────────────────── */
+      if(!$("api").value) $("api").value=window.location.origin;
+
+      /* ── Status ──────────────────────────────────────── */
+      function setStatus(t,live){$("sText").textContent=t;$("sDot").className="dot"+(live?" on":"")}
+
+      /* ══════════════════════════════════════════════════════════════
+         SKELETON DRAWING
+      ══════════════════════════════════════════════════════════════ */
+      const SKEL_COLORS={
+        face:"#a78bfa", upper:"#3b82f6", torso:"#10b981", lower:"#f59e0b"
+      };
+      const SKEL_EDGES=[
+        [0,1,"face"],[0,2,"face"],[1,3,"face"],[2,4,"face"],
+        [5,6,"upper"],[5,7,"upper"],[7,9,"upper"],[6,8,"upper"],[8,10,"upper"],
+        [5,11,"torso"],[6,12,"torso"],[11,12,"torso"],
+        [11,13,"lower"],[13,15,"lower"],[12,14,"lower"],[14,16,"lower"]
+      ];
+
+      function drawSkeleton(ctx,det,sx,sy){
+        if(!det.keypoints) return;
+        const kps=det.keypoints;
+        // Draw bones
+        for(const[a,b,group] of SKEL_EDGES){
+          const ka=kps[a],kb=kps[b];
+          if(!ka||!kb) continue;
+          if(ka.visibility<0.3&&kb.visibility<0.3) continue;
+          ctx.beginPath();
+          ctx.moveTo(ka.x*sx,ka.y*sy);
+          ctx.lineTo(kb.x*sx,kb.y*sy);
+          ctx.strokeStyle=rgba(SKEL_COLORS[group]||"#3b82f6",Math.min(ka.visibility,kb.visibility)*0.8+0.2);
+          ctx.lineWidth=2;
+          ctx.stroke();
+        }
+        // Draw keypoints
+        for(const kp of kps){
+          if(kp.visibility<0.3) continue;
+          ctx.beginPath();
+          ctx.arc(kp.x*sx,kp.y*sy,3,0,Math.PI*2);
+          ctx.fillStyle=kp.visible?"#10b981":"#475569";
+          ctx.fill();
+          ctx.strokeStyle="#000";
+          ctx.lineWidth=1;
+          ctx.stroke();
+        }
+      }
+
+      /* ══════════════════════════════════════════════════════════════
+         DETECTION DRAWING (shared by all tabs)
+      ══════════════════════════════════════════════════════════════ */
+      function drawOverlay(ctx,dets,imgW,imgH,cw,ch){
+        const sx=cw/imgW, sy=ch/imgH;
+        ctx.clearRect(0,0,cw,ch);
+        let classIdx=0;
+        for(const d of dets){
+          const c=COL(d.class_id??classIdx);
+          classIdx++;
+          const{x1,y1,x2,y2}=d.bbox;
+          const bx=x1*sx,by=y1*sy,bw=(x2-x1)*sx,bh=(y2-y1)*sy;
+
+          // Segmentation mask
+          if(d.mask_polygon&&d.mask_polygon.length>2){
+            ctx.beginPath();
+            ctx.moveTo(d.mask_polygon[0][0]*sx,d.mask_polygon[0][1]*sy);
+            for(let i=1;i<d.mask_polygon.length;i++) ctx.lineTo(d.mask_polygon[i][0]*sx,d.mask_polygon[i][1]*sy);
+            ctx.closePath();
+            ctx.fillStyle=rgba(c,.22);
+            ctx.fill();
+            ctx.strokeStyle=rgba(c,.5);
+            ctx.lineWidth=1;
+            ctx.stroke();
+          }
+
+          // Box
+          ctx.strokeStyle=c;
+          ctx.lineWidth=2;
+          ctx.strokeRect(bx,by,bw,bh);
+
+          // Label
+          const lbl=`${d.class_name} ${(d.confidence*100).toFixed(1)}%`;
+          ctx.font="bold 11px system-ui";
+          const tw=ctx.measureText(lbl).width+8;
+          ctx.fillStyle=c;
+          ctx.fillRect(bx,by-16,tw,16);
+          ctx.fillStyle="#fff";
+          ctx.fillText(lbl,bx+4,by-3);
+
+          // Skeleton (pose keypoints)
+          drawSkeleton(ctx,d,sx,sy);
+        }
+      }
+
+      /* ══════════════════════════════════════════════════════════════
+         HUD OVERLAY — burned into every recorded frame
+      ══════════════════════════════════════════════════════════════ */
+      function drawRecHUD(ctx,w,h){
+        const pad=8, lineH=14, font="bold 11px system-ui", smallFont="10px system-ui";
+        const modelName=(curModelInfo.arch||model()).toUpperCase();
+        const serv=(curModelInfo.serving||"onnxruntime").toUpperCase();
+        const recDur=recStart?fmtDur(performance.now()-recStart):"00:00:00";
+
+        // ── Top-left: Model + recording indicator ──
+        ctx.font=font;
+        // Background
+        const topLines=[
+          `● REC  ${recDur}`,
+          `MODEL  ${modelName}`,
+          `SERVE  ${serv}`,
+          `RES    ${camBuf.width}×${camBuf.height}`,
+        ];
+        const topW=Math.max(...topLines.map(l=>ctx.measureText(l).width))+pad*2+4;
+        const topH=topLines.length*lineH+pad*2;
+        ctx.fillStyle="rgba(0,0,0,0.7)";
+        roundRect(ctx,4,4,topW,topH,6);ctx.fill();
+        // Red dot
+        ctx.fillStyle="#ef4444";
+        ctx.beginPath();ctx.arc(4+pad+4,4+pad+6,4,0,Math.PI*2);ctx.fill();
+        // Text
+        ctx.fillStyle="#ef4444";ctx.font=font;
+        ctx.fillText(topLines[0],4+pad+12,4+pad+lineH*0.8);
+        ctx.fillStyle="#e6edf3";
+        for(let i=1;i<topLines.length;i++){
+          ctx.fillText(topLines[i],4+pad,4+pad+lineH*(i+0.8));
+        }
+
+        // ── Top-right: Live metrics ──
+        const fps=mLastFps; const det=mLastDetCount; const ims=mLastInferMs;
+        const conf=mLastAvgConf;
+        const rightLines=[
+          `FPS   ${fps}`,
+          `DET   ${det}`,
+          `INF   ${typeof ims==="number"?ims.toFixed(1)+"ms":"--"}`,
+          `CONF  ${conf}`,
+          `TOTAL ${mTotDet}`,
+        ];
+        ctx.font=font;
+        const rW=Math.max(...rightLines.map(l=>ctx.measureText(l).width))+pad*2;
+        const rH=rightLines.length*lineH+pad*2;
+        ctx.fillStyle="rgba(0,0,0,0.7)";
+        roundRect(ctx,w-rW-4,4,rW,rH,6);ctx.fill();
+        ctx.fillStyle="#3b82f6";ctx.font=font;
+        for(let i=0;i<rightLines.length;i++){
+          ctx.fillStyle=i===0?"#10b981":i===1?"#3b82f6":i===2?"#f59e0b":"#e6edf3";
+          ctx.fillText(rightLines[i],w-rW-4+pad,4+pad+lineH*(i+0.8));
+        }
+
+        // ── Bottom-left: OpenDeploy watermark ──
+        ctx.font=smallFont;
+        ctx.fillStyle="rgba(255,255,255,0.4)";
+        ctx.fillText("OpenDeploy Vision Studio",8,h-8);
+      }
+
+      function roundRect(ctx,x,y,w,h,r){
+        ctx.beginPath();
+        ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+        ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+        ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+        ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);
+        ctx.closePath();
+      }
+
+      /* ══════════════════════════════════════════════════════════════
+         API CALL — route to correct endpoint based on model choice
+      ══════════════════════════════════════════════════════════════ */
+      async function runInference(b64){
+        const m=model();
+        let url,body;
+        if(m==="analyze"){
+          url=`${api()}/vision/analyze`;
+          body=JSON.stringify({image:b64});
+        } else if(m==="yolov8-pose"){
+          url=`${api()}/vision/pose`;
+          body=JSON.stringify({image:b64});
+        } else {
+          url=`${api()}/vision/detect`;
+          body=JSON.stringify({image:b64,model:m});
+        }
+        const resp=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body});
+        if(!resp.ok) throw new Error(`API ${resp.status}: ${await resp.text()}`);
+        return resp.json();
+      }
+
+      /** Normalise the API response into a flat detections array + metadata */
+      function normalise(data){
+        if(data.combined){
+          // Combined analyze endpoint
+          const segDets=(data.segmentation?.detections||[]).map((d,i)=>({...d,class_id:d.class_id??i}));
+          const poseDets=data.pose?.detections||[];
+          // Merge pose keypoints onto matching seg detections by IoU or just concat
+          const merged=[...segDets];
+          for(const pd of poseDets){
+            // Try to find a matching seg detection (same rough bbox area)
+            let matched=false;
+            for(const sd of merged){
+              if(sd.class_name==="person"&&!sd.keypoints&&bboxIOU(sd.bbox,pd.bbox)>0.3){
+                sd.keypoints=pd.keypoints;
+                sd.skeleton=pd.skeleton;
+                sd.visible_keypoints=pd.visible_keypoints;
+                sd.total_keypoints=pd.total_keypoints;
+                matched=true;
+                break;
+              }
+            }
+            if(!matched) merged.push({...pd,class_id:merged.length});
+          }
+          return{
+            detections:merged,
+            detection_count:merged.length,
+            inference_ms:data.total_compute_ms||(data.segmentation?.inference_ms||0)+(data.pose?.inference_ms||0),
+            image_size:data.segmentation?.image_size||data.pose?.image_size||"640x640",
+            model:"combined",
+            version:"",
+            serving:data.segmentation?.serving||"onnxruntime",
+            seg_ms:data.segmentation?.inference_ms,
+            pose_ms:data.pose?.inference_ms,
+          };
+        }
+        // Single model response
+        return{
+          detections:(data.detections||[]).map((d,i)=>({...d,class_id:d.class_id??i})),
+          detection_count:data.detection_count||0,
+          inference_ms:data.inference_ms||0,
+          image_size:data.image_size||"640x640",
+          model:data.model||"",
+          version:data.version||"",
+          serving:data.serving||"",
+        };
+      }
+
+      function bboxIOU(a,b){
+        const ix1=Math.max(a.x1,b.x1),iy1=Math.max(a.y1,b.y1);
+        const ix2=Math.min(a.x2,b.x2),iy2=Math.min(a.y2,b.y2);
+        if(ix2<=ix1||iy2<=iy1) return 0;
+        const inter=(ix2-ix1)*(iy2-iy1);
+        const aA=(a.x2-a.x1)*(a.y2-a.y1),bA=(b.x2-b.x1)*(b.y2-b.y1);
+        return inter/(aA+bA-inter);
+      }
+
+      /* ══════════════════════════════════════════════════════════════
+         TAB 1: IMAGE UPLOAD
+      ══════════════════════════════════════════════════════════════ */
+      const dropZone=$("dropZone"), fileInput=$("fileInput");
+
+      dropZone.addEventListener("click",()=>fileInput.click());
+      dropZone.addEventListener("dragover",e=>{e.preventDefault();dropZone.classList.add("over")});
+      dropZone.addEventListener("dragleave",()=>dropZone.classList.remove("over"));
+      dropZone.addEventListener("drop",e=>{e.preventDefault();dropZone.classList.remove("over");if(e.dataTransfer.files[0]) processImage(e.dataTransfer.files[0])});
+      fileInput.addEventListener("change",()=>{if(fileInput.files[0]) processImage(fileInput.files[0])});
+
+      // Paste support
+      document.addEventListener("paste",e=>{
+        if(activeTab!=="image") return;
+        const items=e.clipboardData?.items;
+        if(!items) return;
+        for(const it of items){
+          if(it.type.startsWith("image/")){
+            processImage(it.getAsFile());
+            return;
+          }
+        }
+      });
+
+      async function processImage(file){
+        setStatus("Processing image…");
+        const b64=await fileToBase64(file);
+        const area=$("imgResultArea");
+        area.innerHTML='<div style="color:#64748b;font-size:12px">Running inference…</div>';
+
+        try{
+          const raw=await runInference(b64);
+          const data=normalise(raw);
+          renderImageResult(file,b64,data,area);
+          setStatus(`Image: ${data.detection_count} detections in ${data.inference_ms}ms`,true);
+        }catch(err){
+          area.innerHTML=`<div style="color:#ef4444;font-size:12px">Error: ${err.message}</div>`;
+          setStatus("Error: "+err.message);
+        }
+      }
+
+      function fileToBase64(file){
+        return new Promise(r=>{
+          const fr=new FileReader();
+          fr.onload=()=>r(fr.result.split(",")[1]);
+          fr.readAsDataURL(file);
+        });
+      }
+
+      function renderImageResult(file,b64,data,area){
+        const[imgW,imgH]=data.image_size.split("x").map(Number);
+        area.innerHTML=`
+          <div class="res-bar">
+            <div class="res-chip"><b>${data.detection_count}</b> detections</div>
+            <div class="res-chip"><b>${data.inference_ms}</b> ms</div>
+            <div class="res-chip">${data.model} · ${data.serving}</div>
+            ${data.seg_ms!=null?`<div class="res-chip">seg <b>${data.seg_ms}</b>ms · pose <b>${data.pose_ms}</b>ms</div>`:""}
+          </div>
+          <div class="canvas-wrap">
+            <img id="imgPreview" />
+            <canvas id="imgOverlay" class="overlay"></canvas>
+          </div>
+          <div class="results" id="imgDets"></div>
+        `;
+        const img=$("imgPreview");
+        img.onload=()=>{
+          const c=$("imgOverlay");
+          c.width=img.naturalWidth;
+          c.height=img.naturalHeight;
+          drawOverlay(c.getContext("2d"),data.detections,imgW,imgH,img.naturalWidth,img.naturalHeight);
+        };
+        img.src="data:"+file.type+";base64,"+b64;
+
+        // Detection cards
+        renderDetCards($("imgDets"),data.detections);
+      }
+
+      function renderDetCards(container,dets){
+        if(!dets.length){container.innerHTML='<div style="color:#475569;font-size:12px;margin-top:8px">No detections.</div>';return}
+        container.innerHTML='<div class="det-grid">'+dets.map((d,i)=>{
+          const b=d.bbox;
+          let kptsHtml="";
+          if(d.keypoints&&d.keypoints.length){
+            kptsHtml=`<div class="kpts-grid">${d.keypoints.map(k=>`<div class="kpt ${k.visible?"vis":"hid"}">${k.name} <span>${(k.visibility*100).toFixed(0)}%</span></div>`).join("")}</div>`;
+            kptsHtml+=`<div class="skel-info">${d.visible_keypoints||0}/${d.total_keypoints||17} keypoints visible</div>`;
+          }
+          return`<div class="det-card">
+            <div class="det-head"><span class="det-name" style="color:${COL(d.class_id??i)}">${d.class_name}</span><span class="det-conf">${(d.confidence*100).toFixed(1)}%</span></div>
+            <div class="det-bbox">bbox (${b.x1.toFixed(0)}, ${b.y1.toFixed(0)}) → (${b.x2.toFixed(0)}, ${b.y2.toFixed(0)})</div>
+            ${kptsHtml}
+          </div>`;
+        }).join("")+"</div>";
+      }
+
+      /* ══════════════════════════════════════════════════════════════
+         TAB 2: LIVE CAMERA
+      ══════════════════════════════════════════════════════════════ */
+      const camVid=$("camVid"), camBuf=$("camBuf"), camBufCtx=camBuf.getContext("2d");
+      const camOverlay=$("camOverlay"), camOvCtx=camOverlay.getContext("2d");
+      const recCanvas=$("recCanvas"), recCtx=recCanvas.getContext("2d");
+      let camStream=null, camTimer=null, camInFlight=false;
+      let sessionStart=null, sessionIv=null;
+      let camFacing="environment"; // "environment" (rear) or "user" (front)
+
+      // Metrics state
+      let mFrames=0,mFpsStart=0,mTotDet=0,mTotInfer=0,mInferN=0,mInferHist=[];
+      let mTotConf=0,mConfN=0,mUniq=new Set(),mClsCounts={};
+      let mPrevCls=null,mStabHist=[];
+      let logEntries=[], LOG_MAX=500, lastLogCls=new Set(), logFrameN=0;
+
+      // Extended metrics for recordings
+      let mMinInfer=Infinity, mMaxInfer=0, mPeakDet=0, mPeakCls=0;
+      let mSegTot=0, mSegN=0, mPoseTot=0, mPoseN=0;
+      let mAllInfer=[], mAllConf=[];  // full history for histograms
+      let mFrameLog=[];  // per-frame data for JSON log
+      let mLastDetCount=0, mLastInferMs=0, mLastFps="--", mLastAvgConf="--";
+
+      // Recording
+      let mediaRec=null,recChunks=[],isRec=false,recStart=null,compIv=null;
+      let localRecs=[], recDetCnt=0, curModelInfo={arch:"",version:"",serving:""};
+      let recMinInfer=Infinity, recMaxInfer=0, recPeakDet=0, recPeakCls=0;
+      let recInferHist=[], recConfHist=[], recFrameLog=[];
+      let recSegTot=0, recSegN=0, recPoseTot=0, recPoseN=0;
+      let recStabHist=[], recTotInfer=0, recInferN=0, recTotConf=0, recConfN=0, recClsCounts={};
+
+      function syncCamOverlay(){
+        const r=camVid.getBoundingClientRect();
+        camOverlay.width=r.width;camOverlay.height=r.height;
+      }
+      camVid.addEventListener("loadedmetadata",syncCamOverlay);
+      window.addEventListener("resize",syncCamOverlay);
+
+      function resetMetrics(){
+        mFrames=0;mFpsStart=performance.now();mTotDet=0;mTotInfer=0;mInferN=0;mInferHist=[];
+        mTotConf=0;mConfN=0;mUniq=new Set();mClsCounts={};
+        mPrevCls=null;mStabHist=[];
+        mMinInfer=Infinity;mMaxInfer=0;mPeakDet=0;mPeakCls=0;
+        mSegTot=0;mSegN=0;mPoseTot=0;mPoseN=0;
+        mAllInfer=[];mAllConf=[];mFrameLog=[];
+        mLastDetCount=0;mLastInferMs=0;mLastFps="--";mLastAvgConf="--";
+        logEntries=[];lastLogCls=new Set();logFrameN=0;
+        $("logList").innerHTML="";$("clsList").innerHTML="";
+        $("logCnt").textContent="0";$("clsCnt").textContent="0";
+        ["kDet","kInfer","kFps","kAvgC","kAvgI","kRate","kCls","kTot","kP95","kStab"].forEach(id=>{$(id).textContent="--"});
+      }
+
+      async function startCam(){
+        /* ── Guard: camera requires secure context (HTTPS) on mobile ── */
+        if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+          const isSecure=window.isSecureContext||location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1";
+          const msg=isSecure
+            ? "Camera API not available on this browser."
+            : "Camera requires HTTPS. Open this page via https:// or on localhost.";
+          setStatus(msg);
+          alert(msg);
+          throw new Error(msg);
+        }
+        const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:camFacing,width:{ideal:640},height:{ideal:480}},audio:false});
+        camStream=stream;
+        camVid.srcObject=stream;
+        await new Promise(r=>{camVid.onloadedmetadata=()=>{camVid.play();r()}});
+        resetMetrics();
+        startTimer();
+        addLog("00:00:00",'<span class="hi">Stream started</span>');
+        setStatus("Live detection active",true);
+        const iv=Number($("interval").value||120);
+        camTimer=setInterval(()=>sendCamFrame(),iv);
+        $("runBtn").disabled=true;$("stopBtn").disabled=false;$("recBtn").disabled=false;$("flipBtn").disabled=false;
+      }
+
+      async function sendCamFrame(){
+        if(camInFlight) return;
+        camInFlight=true;
+        try{
+          camBufCtx.drawImage(camVid,0,0,camBuf.width,camBuf.height);
+          const b64=camBuf.toDataURL("image/jpeg",0.8).split(",")[1];
+          const raw=await runInference(b64);
+          const data=normalise(raw);
+          if(data.detections.length&&data.image_size){
+            const[w,h]=data.image_size.split("x").map(Number);
+            syncCamOverlay();
+            drawOverlay(camOvCtx,data.detections,w,h,camOverlay.width,camOverlay.height);
+          }else{
+            camOvCtx.clearRect(0,0,camOverlay.width,camOverlay.height);
+          }
+          updateLiveMetrics(data);
+
+          // Composite recording frame — video + overlay + HUD
+          if(isRec&&compIv==null){
+            compIv=setInterval(()=>{
+              recCtx.drawImage(camVid,0,0,recCanvas.width,recCanvas.height);
+              recCtx.drawImage(camOverlay,0,0,recCanvas.width,recCanvas.height);
+              drawRecHUD(recCtx,recCanvas.width,recCanvas.height);
+            },33);
+          }
+        }catch(err){
+          setStatus("Error: "+err.message);
+        }finally{
+          camInFlight=false;
+        }
+      }
+
+      function updateLiveMetrics(data){
+        const dets=data.detections||[];
+        const count=data.detection_count??dets.length;
+        const ims=data.inference_ms??null;
+        if(data.model) curModelInfo.arch=data.model;
+        if(data.version) curModelInfo.version=data.version;
+        if(data.serving) curModelInfo.serving=data.serving;
+        mFrames++;mTotDet+=count;
+        if(ims!=null){
+          mTotInfer+=ims;mInferN++;mInferHist.push(ims);if(mInferHist.length>100)mInferHist.shift();
+          mAllInfer.push(ims);
+          if(ims<mMinInfer) mMinInfer=ims;
+          if(ims>mMaxInfer) mMaxInfer=ims;
+        }
+        if(count>mPeakDet) mPeakDet=count;
+        const curClsN=new Set(dets.map(d=>d.class_id??d.class_name)).size;
+        if(curClsN>mPeakCls) mPeakCls=curClsN;
+
+        // Per-class and confidence tracking
+        for(const d of dets){
+          mUniq.add(d.class_id??d.class_name);
+          mTotConf+=d.confidence;mConfN++;
+          mAllConf.push(d.confidence);
+          const key=d.class_id??d.class_name;
+          if(!mClsCounts[key]) mClsCounts[key]={name:d.class_name,count:0,totalConf:0};
+          mClsCounts[key].count++;mClsCounts[key].totalConf+=d.confidence;
+        }
+
+        // Seg/pose split (combined mode)
+        if(data.seg_ms!=null){mSegTot+=data.seg_ms;mSegN++}
+        if(data.pose_ms!=null){mPoseTot+=data.pose_ms;mPoseN++}
+
+        // Frame-to-frame stability
+        const curSet=new Set(dets.map(d=>d.class_id??d.class_name));
+        if(mPrevCls&&(curSet.size>0||mPrevCls.size>0)){
+          const inter=[...curSet].filter(c=>mPrevCls.has(c)).length;
+          const union=new Set([...mPrevCls,...curSet]).size;
+          const stVal=union>0?inter/union*100:100;
+          mStabHist.push(stVal);
+          if(mStabHist.length>30) mStabHist.shift();
+        }
+        mPrevCls=curSet;
+
+        // Recording-specific tracking
+        if(isRec){
+          recDetCnt+=count;
+          recTotInfer+=ims||0; recInferN++;
+          for(const d of dets){recTotConf+=d.confidence;recConfN++}
+          if(ims!=null){recInferHist.push(ims);if(ims<recMinInfer)recMinInfer=ims;if(ims>recMaxInfer)recMaxInfer=ims}
+          for(const d of dets) recConfHist.push(d.confidence);
+          if(count>recPeakDet) recPeakDet=count;
+          if(curClsN>recPeakCls) recPeakCls=curClsN;
+          if(data.seg_ms!=null){recSegTot+=data.seg_ms;recSegN++}
+          if(data.pose_ms!=null){recPoseTot+=data.pose_ms;recPoseN++}
+          const stab2=mStabHist.length?mStabHist[mStabHist.length-1]:100;
+          recStabHist.push(stab2);
+          for(const d of dets){
+            const k=d.class_id??d.class_name;
+            if(!recClsCounts[k]) recClsCounts[k]={name:d.class_name,count:0};
+            recClsCounts[k].count++;
+          }
+          // Per-frame log entry
+          recFrameLog.push({
+            f:mFrames,t:Math.round(elapsed()),
+            det:count,ms:ims,
+            cls:[...curSet],
+            conf:dets.map(d=>+d.confidence.toFixed(3))
+          });
+        }
+
+        // Update KPIs
+        const elSec=(performance.now()-mFpsStart)/1000;
+        const fps=elSec>0?(mFrames/elSec).toFixed(1):"--";
+        const avgI=mInferN>0?(mTotInfer/mInferN).toFixed(1):"--";
+        const avgC=mConfN>0?(mTotConf/mConfN*100).toFixed(1)+"%":"--";
+        const rate=elSec>0?(mTotDet/elSec).toFixed(1):"--";
+        const stab=mStabHist.length>0?(mStabHist.reduce((a,b)=>a+b,0)/mStabHist.length).toFixed(0)+"%":"--";
+        let p95="--";
+        if(mInferHist.length>=5){const s=[...mInferHist].sort((a,b)=>a-b);p95=s[Math.floor(s.length*0.95)].toFixed(1)+"ms"}
+
+        mLastDetCount=count;mLastInferMs=ims||0;mLastFps=fps;mLastAvgConf=avgC;
+
+        $("kDet").textContent=count;
+        $("kInfer").textContent=ims!=null?ims.toFixed(1)+"ms":"--";
+        $("kFps").textContent=fps;
+        $("kAvgC").textContent=avgC;
+        $("kAvgI").textContent=avgI!=="--"?avgI+"ms":"--";
+        $("kRate").textContent=rate;
+        $("kCls").textContent=mUniq.size;
+        $("kTot").textContent=mTotDet;
+        $("kP95").textContent=p95;
+        $("kStab").textContent=stab;
+
+        // Event log
+        logFrameN++;
+        const newCls=new Set(dets.map(d=>d.class_name));
+        const appeared=[...newCls].filter(c=>!lastLogCls.has(c));
+        const gone=[...lastLogCls].filter(c=>!newCls.has(c));
+        if(appeared.length||gone.length){
+          const ts=fmtDur(elapsed());
+          if(appeared.length) addLog(ts,`<span class="det">${appeared.join(", ")}</span> detected`);
+          if(gone.length) addLog(ts,`<span class="gone">${gone.join(", ")}</span> left`);
+        }
+        lastLogCls=newCls;
+
+        // Class list
+        $("clsCnt").textContent=mUniq.size;
+        const sorted=Object.entries(mClsCounts).sort((a,b)=>b[1].count-a[1].count);
+        const maxC=sorted.length?sorted[0][1].count:1;
+        $("clsList").innerHTML=sorted.map(([k,v],i)=>{
+          const pct=(v.count/maxC*100).toFixed(0);
+          const avgConf=(v.totalConf/v.count*100).toFixed(0);
+          return`<div class="cls-row"><div class="dot" style="background:${COL(i)}"></div><div class="name">${v.name}</div><div class="cnt">${v.count}</div><div class="bar-w"><div class="bar-f" style="width:${pct}%;background:${COL(i)}"></div></div></div>`;
+        }).join("");
+      }
+
+      function addLog(ts,html){
+        logEntries.push({ts,html});
+        if(logEntries.length>LOG_MAX) logEntries.shift();
+        const el=document.createElement("div");el.className="log-e";
+        el.innerHTML=`<span class="t">${ts}</span><span class="m">${html}</span>`;
+        $("logList").prepend(el);
+        $("logCnt").textContent=logEntries.length;
+      }
+
+      function stopCam(){
+        if(isRec) stopRec();
+        if(camTimer){clearInterval(camTimer);camTimer=null}
+        if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}
+        camOvCtx.clearRect(0,0,camOverlay.width,camOverlay.height);
+        stopTimer();
+        const dur=fmtDur(elapsed());
+        addLog(dur,`<span class="hi">Stream stopped</span> — ${mTotDet} total det`);
+        setStatus(`Stopped — ${dur}, ${mTotDet} detections`);
+        $("runBtn").disabled=false;$("stopBtn").disabled=true;$("recBtn").disabled=true;$("flipBtn").disabled=true;
+      }
+
+      /* ── Timer ───────────────────────────────────────── */
+      function startTimer(){sessionStart=performance.now();sessionIv=setInterval(()=>{$("timer").textContent=fmtDur(elapsed())},500)}
+      function stopTimer(){if(sessionIv){clearInterval(sessionIv);sessionIv=null}}
+      function elapsed(){return sessionStart?performance.now()-sessionStart:0}
+
+      /* ── Recording ───────────────────────────────────── */
+      /* Pick best recording MIME type (Safari doesn't support VP9/WebM) */
+      function recMime(){
+        const types=["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm","video/mp4"];
+        for(const t of types){if(typeof MediaRecorder!=="undefined"&&MediaRecorder.isTypeSupported(t)) return t}
+        return "";
+      }
+      function recExt(){return recMime().includes("mp4")?"mp4":"webm"}
+
+      function startRec(){
+        if(typeof MediaRecorder==="undefined"){alert("Recording not supported on this browser.");return}
+        recDetCnt=0;recChunks=[];
+        recMinInfer=Infinity;recMaxInfer=0;recPeakDet=0;recPeakCls=0;
+        recInferHist=[];recConfHist=[];recFrameLog=[];recStabHist=[];
+        recSegTot=0;recSegN=0;recPoseTot=0;recPoseN=0;
+        recTotInfer=0;recInferN=0;recTotConf=0;recConfN=0;recClsCounts={};
+        const stream=recCanvas.captureStream(30);
+        const mime=recMime();
+        const opts={videoBitsPerSecond:2_500_000};
+        if(mime) opts.mimeType=mime;
+        mediaRec=new MediaRecorder(stream,opts);
+        mediaRec.ondataavailable=e=>{if(e.data.size>0)recChunks.push(e.data)};
+        mediaRec.start(1000);
+        recStart=performance.now();
+        isRec=true;
+        $("recBtn").classList.add("on");$("recBtn").textContent="■ Stop Rec";
+        $("timer").classList.add("rec");
+        addLog(fmtDur(elapsed()),'<span class="hi">Recording started</span>');
+      }
+
+      function stopRec(){
+        if(!mediaRec) return;
+        mediaRec.stop();
+        if(compIv){clearInterval(compIv);compIv=null}
+        isRec=false;
+        $("recBtn").classList.remove("on");$("recBtn").textContent="● Rec";
+        $("timer").classList.remove("rec");
+
+        const dur=performance.now()-recStart;
+        mediaRec.onstop=()=>{
+          const ext=recExt();
+          const blob=new Blob(recChunks,{type:recMime()||"video/webm"});
+          const url=URL.createObjectURL(blob);
+
+          // Compute recording-specific histograms
+          const confBuckets=new Array(10).fill(0);
+          for(const c of recConfHist){const b=Math.min(9,Math.floor(c*10));confBuckets[b]++}
+          const inferBuckets=new Array(10).fill(0);
+          if(recInferHist.length){
+            const mx=Math.max(...recInferHist)||1;
+            for(const v of recInferHist){const b=Math.min(9,Math.floor(v/mx*9));inferBuckets[b]++}
+          }
+          const recElSec=dur/1000;
+          const recFps=recElSec>0?(recInferN/recElSec):0;
+          const recP95=(()=>{if(recInferHist.length<2)return 0;const s=[...recInferHist].sort((a,b)=>a-b);return s[Math.floor(s.length*0.95)]})();
+          const recAvgStab=recStabHist.length?(recStabHist.reduce((a,b)=>a+b,0)/recStabHist.length):0;
+          const recRate=recElSec>0?(recDetCnt/recElSec):0;
+          const perClsObj={};
+          for(const[k,v] of Object.entries(recClsCounts)) perClsObj[v.name]=v.count;
+
+          const rec={
+            name:`rec_${new Date().toISOString().replace(/[:.]/g,"-").slice(0,19)}`,
+            url,blob,duration:dur,
+            frames:recInferN,detections:recDetCnt,
+            classes:Object.keys(recClsCounts).length,
+            avgConf:recConfN>0?(recTotConf/recConfN*100).toFixed(1):"--",
+            avgInfer:recInferN>0?(recTotInfer/recInferN).toFixed(1):"--",
+            modelArch:curModelInfo.arch,
+            modelVersion:curModelInfo.version,
+            serverStatus:"local",serverId:null,
+            log:[...logEntries],
+            // Extended metrics
+            fps:+recFps.toFixed(1),
+            p95:+recP95.toFixed(1),
+            minInfer:recMinInfer===Infinity?0:+recMinInfer.toFixed(1),
+            maxInfer:+recMaxInfer.toFixed(1),
+            totalInfer:+recTotInfer.toFixed(1),
+            detRate:+recRate.toFixed(1),
+            stability:+recAvgStab.toFixed(1),
+            peakDet:recPeakDet,
+            peakCls:recPeakCls,
+            resolution:camBuf.width+"x"+camBuf.height,
+            serving:curModelInfo.serving||"onnxruntime",
+            segAvgMs:recSegN>0?+(recSegTot/recSegN).toFixed(1):null,
+            poseAvgMs:recPoseN>0?+(recPoseTot/recPoseN).toFixed(1):null,
+            perClassCounts:perClsObj,
+            confHist:confBuckets,
+            inferHist:inferBuckets,
+            frameLog:recFrameLog
+          };
+          localRecs.push(rec);
+          addLog(fmtDur(elapsed()),`<span class="hi">Recording saved</span> — ${fmtDur(dur)}, ${recDetCnt} det`);
+          uploadRec(localRecs.length-1);
+        };
+      }
+
+      async function uploadRec(idx){
+        const rec=localRecs[idx];
+        rec.serverStatus="uploading";
+        try{
+          const fd=new FormData();
+          fd.append("video",rec.blob,rec.name+"."+recExt());
+          const logLines=["OpenDeploy Vision Studio Session Log",`Recording: ${rec.name}`,`Duration: ${fmtDur(rec.duration)}`,`Frames: ${rec.frames}`,`Detections: ${rec.detections}`,"",...rec.log.map(e=>`[${e.ts}] ${e.html.replace(/<[^>]*>/g,"")}`)];
+          fd.append("log",new Blob([logLines.join("\n")],{type:"text/plain"}),rec.name+"_log.txt");
+          fd.append("name",rec.name);fd.append("duration_ms",Math.round(rec.duration));
+          fd.append("total_frames",rec.frames);fd.append("total_detections",rec.detections);
+          fd.append("unique_classes",rec.classes);
+          fd.append("avg_confidence",rec.avgConf==="--"?0:parseFloat(rec.avgConf)/100);
+          fd.append("avg_inference_ms",rec.avgInfer==="--"?0:parseFloat(rec.avgInfer));
+          fd.append("model",model());
+          fd.append("model_arch",rec.modelArch||model());
+          fd.append("model_version",rec.modelVersion||"");
+          fd.append("conf_threshold",$("confTh").value);
+          fd.append("iou_threshold","0.45");
+
+          const resp=await fetch(`${api()}/recordings/upload`,{method:"POST",body:fd});
+          if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const data=await resp.json();
+          rec.serverStatus="saved";rec.serverId=data.id;
+          addLog(fmtDur(elapsed()),`<span class="hi">Uploaded</span> ${rec.name} to server (id=${data.id})`);
+        }catch(err){
+          rec.serverStatus="error";
+          addLog(fmtDur(elapsed()),`<span class="gone">Upload failed</span>: ${err.message}`);
+        }
+      }
+
+      /* ── Run / Stop buttons ──────────────────────────── */
+      $("runBtn").addEventListener("click",async()=>{
+        if(activeTab==="camera"){
+          $("runBtn").disabled=true;setStatus("Connecting camera…");
+          try{await startCam()}catch(err){setStatus("Camera error: "+err.message);$("runBtn").disabled=false}
+        }else if(activeTab==="image"){
+          fileInput.click();
+        }else if(activeTab==="video"){
+          $("vidFileInput").click();
+        }
+      });
+      $("stopBtn").addEventListener("click",()=>{
+        if(activeTab==="camera") stopCam();
+        if(vidProcessing){vidProcessing=false;setStatus("Video processing stopped")}
+      });
+      $("recBtn").addEventListener("click",()=>{
+        if(isRec) stopRec(); else startRec();
+      });
+
+      /* ── Flip camera ─────────────────────────────────── */
+      $("flipBtn").addEventListener("click",async()=>{
+        if(!camStream) return;
+        // Stop current stream
+        if(camTimer){clearInterval(camTimer);camTimer=null}
+        camStream.getTracks().forEach(t=>t.stop());
+        camStream=null;
+        // Toggle facing
+        camFacing=camFacing==="environment"?"user":"environment";
+        // Restart
+        try{
+          const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:camFacing,width:{ideal:640},height:{ideal:480}},audio:false});
+          camStream=stream;
+          camVid.srcObject=stream;
+          await new Promise(r=>{camVid.onloadedmetadata=()=>{camVid.play();r()}});
+          syncCamOverlay();
+          const iv=Number($("interval").value||120);
+          camTimer=setInterval(()=>sendCamFrame(),iv);
+          setStatus(`Camera flipped to ${camFacing==="environment"?"rear":"front"}`,true);
+        }catch(err){
+          setStatus("Flip error: "+err.message);
+        }
+      });
+
+      /* ══════════════════════════════════════════════════════════════
+         TAB 3: VIDEO UPLOAD
+      ══════════════════════════════════════════════════════════════ */
+      const vidDrop=$("vidDropZone"), vidInput=$("vidFileInput");
+      let vidProcessing=false;
+
+      vidDrop.addEventListener("click",()=>vidInput.click());
+      vidDrop.addEventListener("dragover",e=>{e.preventDefault();vidDrop.classList.add("over")});
+      vidDrop.addEventListener("dragleave",()=>vidDrop.classList.remove("over"));
+      vidDrop.addEventListener("drop",e=>{e.preventDefault();vidDrop.classList.remove("over");if(e.dataTransfer.files[0]) processVideo(e.dataTransfer.files[0])});
+      vidInput.addEventListener("change",()=>{if(vidInput.files[0]) processVideo(vidInput.files[0])});
+
+      async function processVideo(file){
+        const area=$("vidResultArea");
+        area.innerHTML=`
+          <div style="margin-bottom:8px">
+            <span style="color:#94a3b8;font-size:12px">Processing: <b>${file.name}</b></span>
+            <div style="margin-top:4px;display:flex;gap:8px;align-items:center">
+              <div style="flex:1;height:4px;background:#1e293b;border-radius:2px;overflow:hidden"><div id="vidProg" style="height:100%;background:#3b82f6;width:0%;transition:width .3s"></div></div>
+              <span id="vidProgText" style="font-size:11px;color:#64748b">0%</span>
+            </div>
+          </div>
+          <div class="canvas-wrap" style="margin-bottom:8px">
+            <video id="vidPlayer" style="max-width:100%;max-height:400px;border-radius:10px" muted></video>
+            <canvas id="vidOverlay" class="overlay"></canvas>
+          </div>
+          <div class="res-bar" id="vidResBar"></div>
+          <div id="vidDets"></div>
+        `;
+
+        const vid=$("vidPlayer");
+        const overlay=$("vidOverlay");
+        const ovCtx=overlay.getContext("2d");
+        vid.src=URL.createObjectURL(file);
+        await new Promise(r=>{vid.onloadedmetadata=()=>{vid.play().then(()=>{vid.pause();vid.currentTime=0;r()});}});
+
+        const dur=vid.duration;
+        const step=Math.max(1/3, Number($("interval").value)/1000);
+        const tmpCanvas=document.createElement("canvas");
+        tmpCanvas.width=vid.videoWidth;tmpCanvas.height=vid.videoHeight;
+        const tmpCtx=tmpCanvas.getContext("2d");
+
+        overlay.width=vid.clientWidth;overlay.height=vid.clientHeight;
+
+        vidProcessing=true;
+        $("stopBtn").disabled=false;
+        setStatus("Processing video…",true);
+
+        let totalDets=0, totalFrames=0, totalMs=0, allDets=[];
+        let t=0;
+
+        while(t<dur&&vidProcessing){
+          vid.currentTime=t;
+          await new Promise(r=>{vid.onseeked=r});
+          tmpCtx.drawImage(vid,0,0);
+          const b64=tmpCanvas.toDataURL("image/jpeg",0.8).split(",")[1];
+
+          try{
+            const raw=await runInference(b64);
+            const data=normalise(raw);
+            totalDets+=data.detection_count;
+            totalMs+=data.inference_ms;
+            totalFrames++;
+            allDets=data.detections;
+
+            if(data.detections.length&&data.image_size){
+              const[w,h]=data.image_size.split("x").map(Number);
+              overlay.width=vid.clientWidth;overlay.height=vid.clientHeight;
+              drawOverlay(ovCtx,data.detections,w,h,overlay.width,overlay.height);
+            }
+
+            $("vidResBar").innerHTML=`
+              <div class="res-chip">Frame <b>${totalFrames}</b>/${Math.ceil(dur/step)}</div>
+              <div class="res-chip"><b>${data.detection_count}</b> detections</div>
+              <div class="res-chip"><b>${data.inference_ms}</b> ms</div>
+              <div class="res-chip">Total: <b>${totalDets}</b> det</div>
+            `;
+          }catch(err){
+            // skip frame on error
+          }
+
+          const pct=Math.min(100,t/dur*100);
+          $("vidProg").style.width=pct+"%";
+          $("vidProgText").textContent=pct.toFixed(0)+"%";
+          t+=step;
+        }
+
+        vidProcessing=false;
+        $("stopBtn").disabled=true;
+        $("vidProg").style.width="100%";$("vidProgText").textContent="Done";
+        setStatus(`Video complete: ${totalFrames} frames, ${totalDets} detections, avg ${totalFrames>0?(totalMs/totalFrames).toFixed(1):0}ms`);
+        renderDetCards($("vidDets"),allDets);
+      }
+
+      /* ══════════════════════════════════════════════════════════════
+         TAB 4: RECORDINGS
+      ══════════════════════════════════════════════════════════════ */
+      let serverRecs=[];
+
+      async function loadRecordings(){
+        try{
+          const resp=await fetch(`${api()}/recordings`);
+          if(!resp.ok) return;
+          const data=await resp.json();
+          serverRecs=data.recordings||[];
+        }catch(e){}
+        renderRecList();
+      }
+
+      function renderRecList(){
+        const all=[...localRecs,...serverRecs.filter(sr=>!localRecs.some(lr=>lr.serverId===sr.id))];
+        $("recCnt").textContent=all.length;
+        if(!all.length){$("recListMain").innerHTML='<div class="rec-empty">No recordings yet. Use Live Camera to record a session.</div>';return}
+
+        let html="";
+        for(let i=0;i<localRecs.length;i++){
+          const r=localRecs[i];
+          const badge=r.serverStatus==="saved"?'<span style="color:#10b981;font-size:9px">✓ saved</span>':r.serverStatus==="uploading"?'<span style="color:#f59e0b;font-size:9px">↑ uploading</span>':'<span style="color:#ef4444;font-size:9px">✗ local</span>';
+          html+=recCardHTML({
+            label:`#${i+1} ${r.name}`,badge,
+            duration:fmtDur(r.duration),dets:r.detections,cls:r.classes,
+            conf:r.avgConf,infer:r.avgInfer,model:r.modelArch||model(),
+            fps:r.fps,p95:r.p95,minI:r.minInfer,maxI:r.maxInfer,
+            rate:r.detRate,stab:r.stability,peakD:r.peakDet,peakC:r.peakCls,
+            res:r.resolution,serving:r.serving,
+            segMs:r.segAvgMs,poseMs:r.poseAvgMs,
+            perCls:r.perClassCounts,
+            actions:`<button class="btn btn-p" style="padding:3px 8px;font-size:10px" onclick="playLocal(${i})">▶</button>
+                     <button class="btn btn-s" style="padding:3px 8px;font-size:10px" onclick="dlLocal(${i})">↓</button>`
+          });
+        }
+        for(const r of serverRecs){
+          if(localRecs.some(lr=>lr.serverId===r.id)) continue;
+          const dur=r.duration_ms?fmtDur(r.duration_ms):"--";
+          const conf=r.avg_confidence!=null?(r.avg_confidence*100).toFixed(1):"--";
+          const infer=r.avg_inference_ms!=null?r.avg_inference_ms.toFixed(1):"--";
+          html+=recCardHTML({
+            label:r.name,badge:'<span style="color:#3b82f6;font-size:9px">● server</span>',
+            duration:dur,dets:r.total_detections||0,cls:r.unique_classes||0,
+            conf,infer,model:r.model_arch||r.model||"",
+            fps:r.fps,p95:r.p95_inference_ms,minI:r.min_inference_ms,maxI:r.max_inference_ms,
+            rate:r.detection_rate,stab:r.stability_score,peakD:r.peak_detections,peakC:r.peak_classes,
+            res:r.input_resolution,serving:r.serving_backend,
+            segMs:r.seg_avg_ms,poseMs:r.pose_avg_ms,
+            perCls:r.per_class_counts,
+            actions:`<button class="btn btn-p" style="padding:3px 8px;font-size:10px" onclick="playSrv(${r.id},'${r.name.replace(/'/g,"\\'")}')">▶</button>
+                     <button class="btn btn-s" style="padding:3px 8px;font-size:10px" onclick="dlSrv(${r.id})">↓</button>
+                     <button class="btn btn-s" style="padding:3px 8px;font-size:10px" onclick="dlSrvLog(${r.id})">📋</button>
+                     <button class="btn btn-d" style="padding:3px 8px;font-size:10px" onclick="delSrv(${r.id})">✕</button>`
+          });
+        }
+        $("recListMain").innerHTML=html;
+      }
+
+      function recCardHTML(o){
+        const v=x=>x!=null&&x!=="--"?x:"--";
+        const modelBadge=o.model?`<span style="color:#60a5fa;font-size:9px;background:rgba(96,165,250,.1);padding:1px 5px;border-radius:6px">${o.model}</span>`:"";
+        const servBadge=o.serving?`<span style="color:#a78bfa;font-size:9px;background:rgba(167,139,250,.1);padding:1px 5px;border-radius:6px">${o.serving}</span>`:"";
+        const resBadge=o.res?`<span style="color:#94a3b8;font-size:9px;background:rgba(148,163,184,.1);padding:1px 5px;border-radius:6px">${o.res}</span>`:"";
+
+        // Per-class breakdown
+        let clsBreak="";
+        if(o.perCls&&Object.keys(o.perCls).length){
+          const sorted=Object.entries(o.perCls).sort((a,b)=>b[1]-a[1]).slice(0,6);
+          clsBreak=sorted.map(([n,c])=>`<span style="font-size:9px;color:#94a3b8">${n}: <b style="color:#3b82f6">${c}</b></span>`).join(" · ");
+        }
+
+        return `<div style="background:#111827;border:1px solid #1e293b;border-radius:10px;padding:10px 12px;margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+            <span style="color:#d1d5db;font-weight:700;font-size:12px">${o.label}</span>
+            ${o.badge} ${modelBadge} ${servBadge} ${resBadge}
+            <div style="flex:1"></div>
+            ${o.actions}
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:4px;margin-bottom:${clsBreak?'6':'0'}px">
+            <div style="font-size:10px;color:#64748b">⏱ <span style="color:#d1d5db">${o.duration}</span></div>
+            <div style="font-size:10px;color:#64748b">Det <span style="color:#3b82f6;font-weight:600">${o.dets}</span></div>
+            <div style="font-size:10px;color:#64748b">Cls <span style="color:#d1d5db">${o.cls}</span></div>
+            <div style="font-size:10px;color:#64748b">Conf <span style="color:#10b981">${v(o.conf)}%</span></div>
+            <div style="font-size:10px;color:#64748b">Avg <span style="color:#f59e0b">${v(o.infer)}ms</span></div>
+            <div style="font-size:10px;color:#64748b">FPS <span style="color:#d1d5db">${v(o.fps)}</span></div>
+            <div style="font-size:10px;color:#64748b">P95 <span style="color:#f59e0b">${v(o.p95)}ms</span></div>
+            <div style="font-size:10px;color:#64748b">Min <span style="color:#10b981">${v(o.minI)}ms</span></div>
+            <div style="font-size:10px;color:#64748b">Max <span style="color:#ef4444">${v(o.maxI)}ms</span></div>
+            <div style="font-size:10px;color:#64748b">Det/s <span style="color:#d1d5db">${v(o.rate)}</span></div>
+            <div style="font-size:10px;color:#64748b">Stab <span style="color:#d1d5db">${v(o.stab)}%</span></div>
+            <div style="font-size:10px;color:#64748b">Peak <span style="color:#3b82f6">${v(o.peakD)}</span> det</div>
+            ${o.segMs!=null?`<div style="font-size:10px;color:#64748b">Seg <span style="color:#d1d5db">${o.segMs}ms</span></div>`:""}
+            ${o.poseMs!=null?`<div style="font-size:10px;color:#64748b">Pose <span style="color:#d1d5db">${o.poseMs}ms</span></div>`:""}
+          </div>
+          ${clsBreak?`<div style="padding-top:4px;border-top:1px solid #1e293b18">${clsBreak}</div>`:""}
+        </div>`;
+      }
+
+      $("refreshRecsBtn").addEventListener("click",()=>loadRecordings());
+
+      // Player
+      window.playLocal=function(i){
+        const r=localRecs[i];
+        if(r.serverId){playSrv(r.serverId,r.name);return}
+        openPlayer(r.url,r.name,`${fmtDur(r.duration)} · ${r.detections} det`);
+      };
+      window.playSrv=function(id,name){
+        openPlayer(`${api()}/recordings/${id}/video`,name,"Server recording");
+      };
+      window.dlLocal=function(i){
+        const r=localRecs[i];
+        if(r.serverId){dlSrv(r.serverId);return}
+        const a=document.createElement("a");a.href=r.url;a.download=r.name+"."+recExt();a.click();
+      };
+      window.dlSrv=function(id){window.open(`${api()}/recordings/${id}/video`,"_blank")};
+      window.dlSrvLog=function(id){window.open(`${api()}/recordings/${id}/log`,"_blank")};
+      window.delSrv=async function(id){
+        if(!confirm("Delete this recording?")) return;
+        try{
+          await fetch(`${api()}/recordings/${id}`,{method:"DELETE"});
+          loadRecordings();
+        }catch(e){}
+      };
+
+      function openPlayer(src,name,meta,recData){
+        $("playerVid").src=src;$("pName").textContent=name;$("pMeta").textContent=meta;
+        $("playerModal").classList.add("open");$("playerVid").play();
+      }
+      window.closePlayer=function(){
+        $("playerVid").pause();$("playerVid").src="";$("playerModal").classList.remove("open");
+      };
+      $("playerModal").addEventListener("click",e=>{if(e.target===$("playerModal"))closePlayer()});
+      document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("playerModal").classList.contains("open"))closePlayer()});
+
+      // Load recordings on init
+      setTimeout(()=>loadRecordings(),1000);
+    })();
+    </script>
+  </body>
+</html>

@@ -5,6 +5,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.7.1] — 2026-02-23
+
+### V7-P2: Pose Estimation Pipeline
+
+**Added**
+- `models/yolov8_pose.py` — YOLOv8-pose keypoint estimation model with two serving modes (ONNX Runtime local, NVIDIA Triton remote)
+- 17 COCO keypoints per person: nose, eyes, ears, shoulders, elbows, wrists, hips, knees, ankles
+- Skeleton edge definitions (16 bones) with bone group categorization (face, upper body, torso, lower body)
+- Per-keypoint visibility scoring with configurable threshold (`kpt_threshold`)
+- Pure-NumPy NMS — identical algorithm to seg model for consistent suppression behavior
+- `scripts/export_yolov8_pose_onnx.py` — one-command ONNX export for pose models (n/s/m/l/x sizes)
+- `triton_model_repo/yolov8_pose/config.pbtxt` — Triton model config with dynamic batching (preferred batch 1/2/4/8, 5ms max queue delay)
+- `POST /vision/pose` — dedicated pose estimation endpoint (base64 image → bboxes + keypoints + skeleton)
+- `POST /vision/analyze` — combined endpoint running YOLOv8-seg + YOLOv8-pose concurrently via `asyncio.gather`
+- `backend/tests/test_pose.py` — 22 unit tests covering model interface, preprocessing, NMS, postprocessing, and all new API endpoints
+
+**Changed**
+- Added dynamic batching to existing `triton_model_repo/yolov8_seg/config.pbtxt` for throughput parity
+- Updated `docker-compose.triton.yml` — added `--model-control-mode=poll` for hot-reloading and GPU device reservation
+- Existing `/vision/detect` endpoint now supports `"model": "yolov8-pose"` routing
+
+**Technical Details**
+- Model I/O: input `[batch, 3, 640, 640]` FP32 → output `[batch, 56, 8400]` FP32 (4 box + 1 conf + 51 keypoint channels)
+- Letterbox preprocessing identical to seg model for consistent coordinate mapping
+- Keypoint coordinates scaled back to original image space with pad/ratio correction
+- Skeleton edges include pre-computed `from_xy`/`to_xy` coordinates for direct frontend rendering
+
+---
+
 ## [0.7.0] — 2026-02-17
 
 ### V7-P1: Person Detection + Instance Segmentation

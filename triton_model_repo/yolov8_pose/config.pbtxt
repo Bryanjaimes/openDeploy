@@ -1,4 +1,4 @@
-name: "yolov8_seg"
+name: "yolov8_pose"
 platform: "onnxruntime_onnx"
 max_batch_size: 8
 
@@ -14,12 +14,7 @@ output [
   {
     name: "output0"
     data_type: TYPE_FP32
-    dims: [116, 8400]
-  },
-  {
-    name: "output1"
-    data_type: TYPE_FP32
-    dims: [32, 160, 160]
+    dims: [56, 8400]
   }
 ]
 

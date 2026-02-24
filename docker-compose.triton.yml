@@ -1,9 +1,20 @@
 services:
   triton:
     image: nvcr.io/nvidia/tritonserver:24.06-py3
-    command: ["tritonserver", "--model-repository=/models"]
+    command:
+      - tritonserver
+      - --model-repository=/models
+      - --model-control-mode=poll
+      - --repository-poll-secs=30
     ports:
       - "8001:8001" # HTTP
       - "8002:8002" # gRPC
     volumes:
       - ./triton_model_repo:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

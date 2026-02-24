@@ -365,9 +365,9 @@ Grafana dashboard is auto-provisioned at http://localhost:3002 with request rate
 - [x] Prometheus + Grafana observability stack
 - [x] gRPC service contract (`proto/v1/`)
 - [x] vLLM and Triton runner integrations
-- [ ] **V7-P0:** Multi-frame SHM ring buffer (64 frames, temporal window)
-- [ ] **V7-P1:** Person detection + instance segmentation (YOLOv8-seg on Triton)
-- [ ] **V7-P2:** Pose estimation pipeline (YOLOv8-pose, 17-keypoint skeletons)
+- [x] **V7-P0:** Multi-frame SHM ring buffer (64 frames, temporal window)
+- [x] **V7-P1:** Person detection + instance segmentation (YOLOv8-seg on Triton)
+- [x] **V7-P2:** Pose estimation pipeline (YOLOv8-pose, 17-keypoint skeletons)
 - [ ] **V7-P3:** Temporal action recognition (SlowFast / X3D on Kinetics-700)
 - [ ] **V7-P4:** Sports-specific fine-tuning (10K+ action classes across all sports)
 - [ ] **V7-P5:** Novel movement detection + VLM description generation
